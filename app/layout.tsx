@@ -26,8 +26,9 @@ export default function RootLayout({
     <html
       lang="vi"
       className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col font-sans bg-canvas text-charcoal">{children}</body>
+      <body className="min-h-full flex flex-col font-sans bg-canvas text-charcoal" suppressHydrationWarning>{children}</body>
     </html>
   );
 }
