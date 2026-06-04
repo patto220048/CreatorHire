@@ -37,7 +37,13 @@ export default function LoginPage() {
         // Lấy thông tin user metadata (role) để chuyển hướng về Dashboard tương ứng
         const role = data.user?.user_metadata?.role || "creator";
         
-        if (role === "freelancer") {
+        // Kiểm tra xem có yêu cầu redirect từ Middleware không
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get("redirect");
+        
+        if (redirect) {
+          router.push(redirect);
+        } else if (role === "freelancer") {
           router.push("/freelancer");
         } else {
           router.push("/creator");
