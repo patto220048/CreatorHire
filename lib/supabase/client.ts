@@ -1,15 +1,13 @@
 // lib/supabase/client.ts
 // Stub helper for Supabase. Chứa kết nối thực tế và dữ liệu mẫu để chạy demo offline.
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-url.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
-
-// Bạn có thể cài đặt `@supabase/supabase-js` bằng lệnh: `npm install @supabase/supabase-js`
-// Dưới đây là bộ khung kết nối Supabase, tự động chuyển đổi giữa offline demo và kết nối thực tế.
 let supabaseInstance: any = null;
 
 export const getSupabaseClient = async () => {
   if (supabaseInstance) return supabaseInstance;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-url.supabase.co";
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
   try {
     const { createClient } = await import("@supabase/supabase-js");
