@@ -11,16 +11,35 @@ export async function getSupabaseServerClient() {
   // Hỗ trợ chế độ Mock Offline nếu không có biến môi trường
   if (!supabaseUrl || !supabaseAnonKey) {
     console.warn("Chưa cấu hình biến môi trường Supabase. Server client đang chạy ở chế độ giả lập.");
+    
+    let mockUser: any = {
+      id: "mock-user-123",
+      email: "demo@creatorhire.vn",
+      user_metadata: { role: "creator", full_name: "Demo Creator" }
+    };
+
+    try {
+      const cookieStore = await cookies();
+      const mockSession = cookieStore.get("mock-session");
+      if (mockSession && mockSession.value) {
+        const sessionData = JSON.parse(mockSession.value);
+        mockUser = {
+          id: "mock-user-123",
+          email: sessionData.email || "demo@creatorhire.vn",
+          user_metadata: { 
+            role: sessionData.role || "creator", 
+            full_name: sessionData.fullName || "Demo Creator" 
+          }
+        };
+      }
+    } catch (e) {
+      console.error("Lỗi đọc mock-session cookie:", e);
+    }
+
     return {
       auth: {
         getUser: async () => ({ 
-          data: { 
-            user: { 
-              id: "mock-user-123", 
-              email: "demo@creatorhire.vn", 
-              user_metadata: { role: "creator", full_name: "Demo Creator" } 
-            } 
-          }, 
+          data: { user: mockUser }, 
           error: null 
         }),
       },

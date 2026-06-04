@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import gsap from "gsap";
 
 interface Freelancer {
   id: string;
@@ -65,8 +66,59 @@ const mockFreelancers: Freelancer[] = [
 export default function FreelancersPage() {
   const [selectedRole, setSelectedRole] = useState<string>("all");
   const [search, setSearch] = useState<string>("");
+  const [freelancers, setFreelancers] = useState<Freelancer[]>(mockFreelancers);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const filteredFreelancers = mockFreelancers.filter((fl) => {
+  // Helper đọc cookie ở client-side
+  const getCookie = (name: string) => {
+    if (typeof document === "undefined") return null;
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(";").shift();
+    return null;
+  };
+
+  useEffect(() => {
+    const profileCookie = getCookie("mock-profile");
+    if (profileCookie) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(profileCookie));
+        const mergedList = [
+          {
+            id: parsed.id || "mock-user-123",
+            name: parsed.name || "Hoàng Minh",
+            role: parsed.role || "Video Editor",
+            avatar: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2300d4a4'/><text x='50' y='58' font-family='sans-serif' font-size='32' font-weight='bold' fill='%230a0a0a' text-anchor='middle'>HM</text></svg>",
+            rating: 5.0,
+            completedJobs: 4,
+            skills: parsed.skills || [],
+            bio: parsed.bio || "",
+            experience: parsed.experience || "3 năm kinh nghiệm",
+          },
+          ...mockFreelancers.filter((fl) => fl.id !== (parsed.id || "mock-user-123")),
+        ];
+        setFreelancers(mergedList);
+      } catch (e) {
+        console.error("Lỗi parse cookie profile:", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      const items = containerRef.current?.querySelectorAll(".freelancer-card");
+      if (items && items.length > 0) {
+        gsap.fromTo(
+          items,
+          { opacity: 0, y: 25 },
+          { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: "power3.out" }
+        );
+      }
+    }, containerRef);
+    return () => ctx.revert();
+  }, [freelancers]);
+
+  const filteredFreelancers = freelancers.filter((fl) => {
     const matchesRole = selectedRole === "all" || fl.role.toLowerCase() === selectedRole.toLowerCase();
     const matchesSearch = fl.name.toLowerCase().includes(search.toLowerCase()) ||
                           fl.bio.toLowerCase().includes(search.toLowerCase()) ||
@@ -141,12 +193,13 @@ export default function FreelancersPage() {
 
       {/* Directory Listings */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-12 flex-1 w-full">
-        <div className="space-y-6">
+        <div ref={containerRef} className="space-y-6">
           {filteredFreelancers.length > 0 ? (
             filteredFreelancers.map((fl) => (
               <div
                 key={fl.id}
-                className="bg-canvas border border-hairline rounded-lg p-6 shadow-sm hover:shadow-md hover:border-hairline transition-all flex flex-col md:flex-row gap-6 items-start"
+                className="freelancer-card bg-canvas border border-hairline rounded-lg p-6 shadow-sm hover:shadow-md hover:border-hairline transition-all flex flex-col md:flex-row gap-6 items-start"
+                style={{ opacity: 0 }}
               >
                 <img
                   src={fl.avatar}
