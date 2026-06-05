@@ -23,7 +23,9 @@ export async function submitDeliverableAction(prevState: any, formData: FormData
     return { error: "Đường dẫn sản phẩm bàn giao không hợp lệ (phải bắt đầu bằng http:// hoặc https://)." };
   }
 
-  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const cookieStore = await cookies();
+  const mockSession = cookieStore.get("mock-session");
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || (mockSession && mockSession.value);
 
   if (isMock) {
     try {

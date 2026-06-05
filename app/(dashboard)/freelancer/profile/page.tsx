@@ -9,7 +9,9 @@ export default async function FreelancerProfilePage() {
   const supabase = await getSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   const userId = user?.id || "mock-user-123";
-  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const cookieStore = await cookies();
+  const mockSession = cookieStore.get("mock-session");
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || (mockSession && mockSession.value);
 
   let profileData = {
     fullName: user?.user_metadata?.full_name || "Hoàng Minh",

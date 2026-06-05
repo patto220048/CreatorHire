@@ -15,17 +15,19 @@ export async function createMiddlewareClient(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Hỗ trợ chế độ Mock Offline nếu thiếu biến môi trường
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const mockSession = request.cookies.get("mock-session");
+  const isMock = !supabaseUrl || !supabaseAnonKey || (mockSession && mockSession.value);
+
+  // Hỗ trợ chế độ Mock Offline
+  if (isMock) {
     // Trả về Mock Client có khả năng đọc "mock-session" từ cookies để kiểm tra chuyển hướng
-    const mockSession = request.cookies.get("mock-session");
-    
     const mockSupabase = {
       auth: {
         getUser: async () => {
           if (mockSession && mockSession.value) {
             try {
-              const sessionData = JSON.parse(mockSession.value);
+              const decodedValue = decodeURIComponent(mockSession.value);
+              const sessionData = JSON.parse(decodedValue);
               return { 
                 data: { 
                   user: { 

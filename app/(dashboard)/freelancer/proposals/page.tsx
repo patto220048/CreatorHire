@@ -11,7 +11,9 @@ export default async function FreelancerProposalsPage() {
   const userId = user?.id || "mock-user-123";
 
   // Check if we are running in Mock Mode
-  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const cookieStore = await cookies();
+  const mockSession = cookieStore.get("mock-session");
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || (mockSession && mockSession.value);
 
   let dbProposals: any[] = [];
 

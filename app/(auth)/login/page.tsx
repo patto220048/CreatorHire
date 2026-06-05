@@ -23,6 +23,27 @@ export default function LoginPage() {
       return;
     }
 
+    // Tự động xử lý đăng nhập mock nếu email chứa chữ "mock"
+    if (email.toLowerCase().includes("mock")) {
+      const role = email.toLowerCase().includes("freelancer") ? "freelancer" : "creator";
+      const fullName = role === "freelancer" ? "Mock Freelancer" : "Mock Creator";
+      
+      const sessionData = {
+        email: email,
+        role,
+        fullName
+      };
+      
+      document.cookie = `mock-session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400`;
+      
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get("redirect") || (role === "freelancer" ? "/freelancer" : "/creator");
+      
+      router.push(redirect);
+      setLoading(false);
+      return;
+    }
+
     try {
       const supabase = await getSupabaseClient();
       

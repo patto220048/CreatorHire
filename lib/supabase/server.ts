@@ -8,9 +8,13 @@ export async function getSupabaseServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Hỗ trợ chế độ Mock Offline nếu không có biến môi trường
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn("Chưa cấu hình biến môi trường Supabase. Server client đang chạy ở chế độ giả lập.");
+  const cookieStore = await cookies();
+  const mockSession = cookieStore.get("mock-session");
+  const isMock = !supabaseUrl || !supabaseAnonKey || (mockSession && mockSession.value);
+
+  // Hỗ trợ chế độ Mock Offline
+  if (isMock) {
+    console.warn("Chưa cấu hình biến môi trường Supabase hoặc đang sử dụng Mock Session. Server client đang chạy ở chế độ giả lập.");
     
     let mockUser: any = {
       id: "mock-user-123",
@@ -19,10 +23,9 @@ export async function getSupabaseServerClient() {
     };
 
     try {
-      const cookieStore = await cookies();
-      const mockSession = cookieStore.get("mock-session");
       if (mockSession && mockSession.value) {
-        const sessionData = JSON.parse(mockSession.value);
+        const decodedValue = decodeURIComponent(mockSession.value);
+        const sessionData = JSON.parse(decodedValue);
         mockUser = {
           id: "mock-user-123",
           email: sessionData.email || "demo@creatorhire.vn",
@@ -51,8 +54,6 @@ export async function getSupabaseServerClient() {
       }),
     } as any;
   }
-
-  const cookieStore = await cookies();
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {

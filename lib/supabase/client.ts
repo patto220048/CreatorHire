@@ -3,18 +3,24 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 
-let supabaseInstance: any = null;
+let realInstance: any = null;
+let mockInstance: any = null;
 
 export const getSupabaseClient = async () => {
-  if (supabaseInstance) return supabaseInstance;
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Hỗ trợ chế độ Mock Offline nếu không có biến môi trường
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn("Supabase URL hoặc Anon Key chưa cấu hình. Hệ thống đang sử dụng Mock Mode.");
-    supabaseInstance = {
+  // Check if mock cookie exists in document
+  let hasMockSession = false;
+  if (typeof document !== "undefined") {
+    hasMockSession = document.cookie.split(";").some(c => c.trim().startsWith("mock-session="));
+  }
+
+  const isMock = !supabaseUrl || !supabaseAnonKey || hasMockSession;
+
+  if (isMock) {
+    if (mockInstance) return mockInstance;
+    mockInstance = {
       auth: {
         signUp: async (data: any) => {
           const role = data.options?.data?.role || "creator";
@@ -100,9 +106,10 @@ export const getSupabaseClient = async () => {
         update: () => ({ data: [], error: null }),
       }),
     };
-    return supabaseInstance;
+    return mockInstance;
   }
 
-  supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey);
-  return supabaseInstance;
+  if (realInstance) return realInstance;
+  realInstance = createBrowserClient(supabaseUrl!, supabaseAnonKey!);
+  return realInstance;
 };

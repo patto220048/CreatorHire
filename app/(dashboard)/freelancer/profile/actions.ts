@@ -22,18 +22,18 @@ export async function updateFreelancerProfileAction(prevState: any, formData: Fo
     ? skillsStr.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
     : [];
 
-  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const cookieStore = await cookies();
+  const mockSessionCookie = cookieStore.get("mock-session");
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || (mockSessionCookie && mockSessionCookie.value);
 
   if (isMock) {
     try {
-      const cookieStore = await cookies();
-      
       // Cập nhật session mock để đồng bộ tên
-      const mockSessionCookie = cookieStore.get("mock-session");
       let sessionData = { role: "freelancer", fullName: "Hoàng Minh", email: "demo@creatorhire.vn" };
       if (mockSessionCookie && mockSessionCookie.value) {
         try {
-          sessionData = JSON.parse(mockSessionCookie.value);
+          const decodedValue = decodeURIComponent(mockSessionCookie.value);
+          sessionData = JSON.parse(decodedValue);
         } catch (e) {}
       }
       
