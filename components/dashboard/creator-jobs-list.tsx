@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { updateProposalStatusAction, releaseEscrowAction } from "@/app/(dashboard)/creator/jobs/actions";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import VideoReviewTool from "@/components/dashboard/video-review-tool";
+import ReviewModal from "@/components/dashboard/review-modal";
 import { 
   Video, 
   FileText, 
@@ -56,6 +57,11 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
   const [activeReviewJobId, setActiveReviewJobId] = useState<string | null>(null);
   const activeReviewJob = jobs.find(j => j.id === activeReviewJobId);
 
+  // States cho hệ thống đánh giá
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [reviewJob, setReviewJob] = useState<{ id: string; title: string; targetId: string; targetName: string } | null>(null);
+  const [reviewedJobIds, setReviewedJobIds] = useState<string[]>([]);
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -71,6 +77,44 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
     };
     fetchUser();
   }, []);
+
+  // Tải danh sách các dự án đã được đánh giá
+  const fetchReviewedJobs = async () => {
+    const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
+                   !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+                   (typeof document !== "undefined" && document.cookie.includes("mock-session="));
+    if (isMock) {
+      try {
+        const match = document.cookie.match(/(?:^|; )mock-reviews=([^;]*)/);
+        if (match) {
+          const reviews = JSON.parse(decodeURIComponent(match[1]));
+          const reviewerId = "mock-user-123";
+          const ids = reviews
+            .filter((r: any) => r.reviewer_id === reviewerId)
+            .map((r: any) => r.job_id);
+          setReviewedJobIds(ids);
+        }
+      } catch (e) {}
+    } else {
+      try {
+        const supabase = await getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase
+            .from("reviews")
+            .select("job_id")
+            .eq("reviewer_id", user.id);
+          if (data) {
+            setReviewedJobIds(data.map((r: any) => r.job_id));
+          }
+        }
+      } catch (e) {}
+    }
+  };
+
+  useEffect(() => {
+    fetchReviewedJobs();
+  }, [jobs]);
 
   const handleReleaseEscrow = (jobId: string) => {
     setActionError(null);
@@ -508,25 +552,48 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
               <CheckCircle2 className="w-3.5 h-3.5 text-stone" /> Đã hoàn thành ({completedJobs.length})
             </h3>
             <div className="grid grid-cols-1 gap-4">
-              {completedJobs.map((job) => (
-                <div key={job.id} className="job-card bg-canvas border border-hairline p-6 rounded-lg shadow-sm grayscale opacity-75" style={{ opacity: 0 }}>
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <h4 className="text-xs font-bold text-ink line-through">{job.title}</h4>
-                      <div className="flex items-center gap-2 text-[10px] text-steel">
-                        <span className="font-semibold text-charcoal">{renderJobCategory(job.category)}</span>
-                        <span>•</span>
-                        <span className="font-mono">{job.budget_amount.toLocaleString("vi-VN")} ₫</span>
+              {completedJobs.map((job) => {
+                const isReviewed = reviewedJobIds.includes(job.id);
+                return (
+                  <div key={job.id} className="job-card bg-canvas border border-hairline p-6 rounded-lg shadow-sm opacity-90 transition-all hover:border-brand-green/20" style={{ opacity: 0 }}>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-ink line-through">{job.title}</h4>
+                        <div className="flex items-center gap-2 text-[10px] text-steel">
+                          <span className="font-semibold text-charcoal">{renderJobCategory(job.category)}</span>
+                          <span>•</span>
+                          <span className="font-mono">{job.budget_amount.toLocaleString("vi-VN")} ₫</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {isReviewed ? (
+                          <span className="text-[9px] font-bold text-yellow-500 bg-yellow-500/10 border border-yellow-500/20 px-3 py-1 rounded-full uppercase tracking-wider">
+                            ★ Đã đánh giá
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setReviewJob({
+                                id: job.id,
+                                title: job.title,
+                                targetId: (job as any).freelancer_id || "mock-user-123",
+                                targetName: (job as any).freelancer_name || "Hoàng Minh (Editor)"
+                              });
+                              setIsReviewOpen(true);
+                            }}
+                            className="h-8 px-4 bg-brand-green text-canvas hover:bg-brand-green-deep rounded-full text-[10px] font-bold transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1 cursor-pointer shadow-sm"
+                          >
+                            ⭐ Đánh giá Freelancer
+                          </button>
+                        )}
+                        <span className="text-[10px] text-stone font-semibold bg-stone/10 border border-stone/20 px-3 py-1 rounded-full uppercase tracking-wider">
+                          Đã đóng
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] text-stone font-semibold bg-stone/10 border border-stone/20 px-3 py-1 rounded-full uppercase tracking-wider">
-                        Đã đóng dự án
-                      </span>
-                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -569,6 +636,24 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Đánh giá Freelancer */}
+      {reviewJob && (
+        <ReviewModal
+          isOpen={isReviewOpen}
+          onClose={() => {
+            setIsReviewOpen(false);
+            setReviewJob(null);
+          }}
+          jobId={reviewJob.id}
+          jobTitle={reviewJob.title}
+          revieweeId={reviewJob.targetId}
+          revieweeName={reviewJob.targetName}
+          onSubmitSuccess={() => {
+            fetchReviewedJobs();
+          }}
+        />
       )}
     </div>
   );

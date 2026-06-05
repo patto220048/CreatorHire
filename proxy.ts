@@ -1,6 +1,5 @@
-// proxy.ts
-// Next.js 16 Proxy để gia hạn session cookie, bảo vệ các tuyến đường riêng tư và phân quyền Role
-// Thay thế cho file middleware.ts cũ theo tiêu chuẩn mới của Next.js 16
+// middleware.ts
+// Next.js 16 Middleware để gia hạn session cookie, bảo vệ các tuyến đường riêng tư và phân quyền Role
 
 import { type NextRequest, NextResponse } from "next/server";
 import { createMiddlewareClient } from "@/lib/supabase/middleware";
@@ -12,10 +11,21 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
+  console.log(`[Proxy Debug] Path: "${path}" | User: "${user?.email || "Guest"}" | Role: "${user?.user_metadata?.role || "None"}"`);
+
   // Định nghĩa các vùng truy cập
-  const isCreatorRoute = path.startsWith("/creator");
-  const isFreelancerRoute = path.startsWith("/freelancer");
+  const isCreatorRoute = path === "/creator" || path.startsWith("/creator/");
+  const isFreelancerRoute = path === "/freelancer" || path.startsWith("/freelancer/");
   const isAuthRoute = path.startsWith("/login") || path.startsWith("/register");
+
+  // Helper để redirect không bị cache bởi trình duyệt
+  const redirectNoCache = (url: URL | string) => {
+    const res = NextResponse.redirect(typeof url === "string" ? new URL(url, request.url) : url);
+    res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.headers.set("Pragma", "no-cache");
+    res.headers.set("Expires", "0");
+    return res;
+  };
 
   // 1. Kiểm tra nếu truy cập vào các tuyến đường cần đăng nhập
   if (isCreatorRoute || isFreelancerRoute) {
@@ -24,7 +34,7 @@ export async function proxy(request: NextRequest) {
       const redirectUrl = new URL("/login", request.url);
       // Lưu lại trang đích để sau khi đăng nhập thành công có thể quay lại
       redirectUrl.searchParams.set("redirect", path);
-      return NextResponse.redirect(redirectUrl);
+      return redirectNoCache(redirectUrl);
     }
 
     // Đã đăng nhập -> Kiểm tra vai trò (Role)
@@ -32,12 +42,12 @@ export async function proxy(request: NextRequest) {
 
     if (isCreatorRoute && role !== "creator") {
       // Là Freelancer nhưng cố truy cập Creator Dashboard -> Redirect về Freelancer Dashboard
-      return NextResponse.redirect(new URL("/freelancer", request.url));
+      return redirectNoCache(new URL("/freelancer", request.url));
     }
 
     if (isFreelancerRoute && role !== "freelancer") {
       // Là Creator nhưng cố truy cập Freelancer Dashboard -> Redirect về Creator Dashboard
-      return NextResponse.redirect(new URL("/creator", request.url));
+      return redirectNoCache(new URL("/creator", request.url));
     }
   }
 
@@ -45,7 +55,7 @@ export async function proxy(request: NextRequest) {
   if (isAuthRoute && user) {
     const role = user.user_metadata?.role || "creator";
     const dashboardPath = role === "freelancer" ? "/freelancer" : "/creator";
-    return NextResponse.redirect(new URL(dashboardPath, request.url));
+    return redirectNoCache(new URL(dashboardPath, request.url));
   }
 
   return response;
@@ -54,7 +64,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Áp dụng proxy cho mọi request ngoại trừ:
+     * Áp dụng middleware cho mọi request ngoại trừ:
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)

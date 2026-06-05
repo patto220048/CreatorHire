@@ -75,6 +75,8 @@ export default async function CreatorJobsPage() {
           ...job,
           delivery_link: escrow ? escrow.delivery_link : null,
           delivery_note: escrow ? escrow.delivery_note : null,
+          freelancer_id: escrow ? (escrow.freelancer_id || "mock-user-123") : null,
+          freelancer_name: escrow ? (escrow.freelancer_name || "Hoàng Minh (Editor)") : null,
         };
       });
       // Đọc các Proposal giả lập từ cookie, nếu chưa có thì nạp mặc định
@@ -123,13 +125,21 @@ export default async function CreatorJobsPage() {
           jobs.map(async (job: any) => {
             const { data: escrow } = await supabase
               .from("escrows")
-              .select("delivery_link, delivery_note")
+              .select(`
+                delivery_link, 
+                delivery_note, 
+                freelancer_id,
+                profiles!escrows_freelancer_id_fkey(full_name)
+              `)
               .eq("job_id", job.id)
               .maybeSingle();
+            
             return {
               ...job,
               delivery_link: escrow ? escrow.delivery_link : null,
               delivery_note: escrow ? escrow.delivery_note : null,
+              freelancer_id: escrow ? escrow.freelancer_id : null,
+              freelancer_name: escrow?.profiles ? (escrow.profiles as any).full_name : null,
             };
           })
         );

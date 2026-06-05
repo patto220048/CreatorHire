@@ -108,7 +108,7 @@ export default async function FreelancerDashboard() {
       }
 
       activeJobs = allJobs
-        .filter((job) => job.status === "in-progress")
+        .filter((job) => job.status === "in-progress" || job.status === "completed")
         .map((job) => {
           const escrow = allEscrows.find((e: any) => e.job_id === job.id);
           return {
@@ -116,6 +116,8 @@ export default async function FreelancerDashboard() {
             budget_amount: job.budget_amount,
             delivery_link: escrow ? escrow.delivery_link : null,
             delivery_note: escrow ? escrow.delivery_note : null,
+            creator_id: escrow ? (escrow.creator_id || "mock-creator-123") : "mock-creator-123",
+            creator_name: escrow ? (escrow.creator_name || "Huy Nguyễn (Creator)") : "Huy Nguyễn (Creator)",
           };
         });
       
@@ -123,7 +125,7 @@ export default async function FreelancerDashboard() {
       const pendingProps = freelancerProps.filter((p) => p.status === "pending");
 
       stats = {
-        activeJobsCount: activeJobs.length,
+        activeJobsCount: activeJobs.filter(j => j.status === "in-progress").length,
         // Thu nhập tích lũy = Tổng tiền các proposal đã được duyệt
         totalEarnings: acceptedProps.reduce((acc, curr) => acc + Number(curr.bid_amount), 0) + (activeJobs.length > 0 ? 3500000 : 0),
         proposalsSent: freelancerProps.length,
@@ -166,7 +168,7 @@ export default async function FreelancerDashboard() {
         );
         freelancerProps = enrichedProps;
 
-        // 2. Lấy các Job mà mình đã ứng tuyển thành công (proposal status = 'accepted' và job status = 'in-progress')
+        // 2. Lấy các Job mà mình đã ứng tuyển thành công (proposal status = 'accepted' và job status = 'in-progress' hoặc 'completed')
         const acceptedJobIds = proposals
           .filter((p: any) => p.status === "accepted")
           .map((p: any) => p.job_id);
@@ -176,7 +178,7 @@ export default async function FreelancerDashboard() {
             .from("jobs")
             .select("*")
             .in("id", acceptedJobIds)
-            .eq("status", "in-progress");
+            .in("status", ["in-progress", "completed"]);
 
           if (jobs && !jobsError) {
             // Lấy thêm thông tin escrow cho mỗi job
@@ -184,7 +186,12 @@ export default async function FreelancerDashboard() {
               jobs.map(async (job: any) => {
                 const { data: escrow } = await supabase
                   .from("escrows")
-                  .select("delivery_link, delivery_note")
+                  .select(`
+                    delivery_link, 
+                    delivery_note,
+                    creator_id,
+                    profiles!escrows_creator_id_fkey(full_name)
+                  `)
                   .eq("job_id", job.id)
                   .maybeSingle();
                 return {
@@ -192,6 +199,8 @@ export default async function FreelancerDashboard() {
                   budget_amount: Number(job.budget_amount),
                   delivery_link: escrow ? escrow.delivery_link : null,
                   delivery_note: escrow ? escrow.delivery_note : null,
+                  creator_id: escrow ? escrow.creator_id : null,
+                  creator_name: escrow?.profiles ? (escrow.profiles as any).full_name : "Huy Nguyễn (Creator)",
                 };
               })
             );

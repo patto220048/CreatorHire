@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { gsap } from "gsap";
 import Navbar from "@/components/navbar";
+import { getReviewsForUserAction } from "@/app/api/reviews/actions";
 import { 
   ArrowLeft, 
   Video, 
@@ -16,7 +17,8 @@ import {
   Send, 
   Briefcase, 
   Check, 
-  AlertCircle 
+  AlertCircle,
+  MessageSquare
 } from "lucide-react";
 
 interface Freelancer {
@@ -51,6 +53,40 @@ export default function FreelancerDetailView({ freelancer, creatorJobs, currentR
   const [isPending, startTransition] = useTransition();
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // States cho danh sách reviews
+  const [reviewsList, setReviewsList] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+
+  // Dynamic rating and completed jobs calculations based on mock/real reviews
+  const [dynamicRating, setDynamicRating] = useState(freelancer.rating);
+  const [dynamicJobsCount, setDynamicJobsCount] = useState(freelancer.completedJobs);
+
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        const res = await getReviewsForUserAction(freelancer.id);
+        if (res.success && res.data) {
+          setReviewsList(res.data);
+          
+          // Nếu có reviews mới, tính toán lại số sao và số dự án xong của Freelancer để hiển thị
+          if (res.data.length > 0) {
+            const sum = res.data.reduce((acc: number, r: any) => acc + r.rating, 0);
+            // Cộng thêm rating mặc định làm nền tảng ban đầu nếu muốn,
+            // hoặc đơn giản là lấy trung bình của toàn bộ reviews mới + cũ
+            const avg = sum / res.data.length;
+            setDynamicRating(Number(avg.toFixed(1)));
+            setDynamicJobsCount(freelancer.completedJobs + res.data.length);
+          }
+        }
+      } catch (e) {
+        console.error("Lỗi đọc reviews:", e);
+      } finally {
+        setLoadingReviews(false);
+      }
+    };
+    fetchReviews();
+  }, [freelancer.id, freelancer.rating, freelancer.completedJobs]);
 
   const profileColRef = useRef<HTMLDivElement>(null);
   const hireColRef = useRef<HTMLDivElement>(null);
@@ -258,11 +294,11 @@ export default function FreelancerDetailView({ freelancer, creatorJobs, currentR
                   {renderRoleIcon(freelancer.role)} {freelancer.role}
                 </p>
                 <div className="flex items-center justify-center sm:justify-start gap-3 mt-2 text-xs">
-                  <span className="flex items-center gap-1 text-yellow-500 font-bold">
-                    <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" /> {freelancer.rating.toFixed(1)}
+                  <span className="flex items-center gap-1 text-yellow-500 font-bold animate-pulse">
+                    <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" /> {dynamicRating.toFixed(1)}
                   </span>
                   <span className="text-stone">•</span>
-                  <span className="text-slate font-medium">{freelancer.completedJobs} dự án đã xong</span>
+                  <span className="text-slate font-medium">{dynamicJobsCount} dự án đã xong</span>
                   <span className="text-stone">•</span>
                   <span className="bg-surface text-steel text-[10px] px-2.5 py-0.5 rounded font-mono border border-hairline-soft">
                     {freelancer.experience}
@@ -313,6 +349,75 @@ export default function FreelancerDetailView({ freelancer, creatorJobs, currentR
                   <span className="text-[10px] text-brand-green font-semibold">▶ Xem mẫu video</span>
                 </div>
               </div>
+            </div>
+
+            {/* Đánh giá & Nhận xét */}
+            <div className="space-y-4 pt-4 border-t border-hairline-soft">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-l-2 border-brand-green pl-2">
+                Đánh giá từ Creator
+              </h3>
+              
+              {loadingReviews ? (
+                <div className="text-center py-6 text-xs text-stone flex items-center justify-center gap-2">
+                  <span className="animate-spin inline-block w-4.5 h-4.5 border-2 border-brand-green border-t-transparent rounded-full" />
+                  Đang tải đánh giá...
+                </div>
+              ) : reviewsList.length === 0 ? (
+                <div className="text-center py-8 bg-surface/50 border border-dashed border-hairline rounded-lg text-xs text-stone">
+                  Chưa có nhận xét nào cho freelancer này.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reviewsList.map((review) => (
+                    <div
+                      key={review.id}
+                      className="p-4 border border-hairline rounded-lg bg-surface/30 space-y-2.5 transition-all hover:border-brand-green-soft"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                          {/* Mini Avatar */}
+                          <div className="w-7 h-7 rounded-full bg-brand-green/10 text-brand-green flex items-center justify-center text-[10px] font-bold border border-brand-green/20">
+                            {review.reviewer_name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="text-[11px] font-bold text-ink">{review.reviewer_name}</h4>
+                            <p className="text-[9px] text-stone">Nhà sáng tạo</p>
+                          </div>
+                        </div>
+
+                        {/* Stars */}
+                        <div className="flex flex-col items-end gap-0.5">
+                          <div className="flex gap-0.5">
+                            {[1, 2, 3, 4, 5].map((starIdx) => (
+                              <Star
+                                key={starIdx}
+                                className={`w-3 h-3 ${
+                                  review.rating >= starIdx
+                                    ? "fill-yellow-500 text-yellow-500"
+                                    : "text-hairline"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[8px] font-mono text-stone">
+                            {new Date(review.created_at).toLocaleDateString("vi-VN")}
+                          </span>
+                        </div>
+                      </div>
+
+                      {review.comment ? (
+                        <p className="text-xs text-slate leading-relaxed bg-canvas p-3 rounded border border-hairline-soft/60 italic">
+                          "{review.comment}"
+                        </p>
+                      ) : (
+                        <p className="text-xs text-stone leading-relaxed italic">
+                          (Không có nhận xét viết tay)
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -396,6 +501,13 @@ export default function FreelancerDetailView({ freelancer, creatorJobs, currentR
                   >
                     <Send className="w-3.5 h-3.5" /> Gửi Lời Mời & Thỏa thuận Báo giá
                   </button>
+                  
+                  <Link
+                    href={`/chat?u=${freelancer.id}`}
+                    className="w-full h-10 mt-3 bg-surface border border-hairline hover:bg-canvas text-charcoal text-xs font-semibold rounded-full transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer hover:scale-105 active:scale-95"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-brand-green" /> Trò chuyện trực tuyến
+                  </Link>
                 </form>
               </div>
             ) : currentRole === "freelancer" ? (
