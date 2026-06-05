@@ -14,7 +14,9 @@ import {
   Check, 
   CheckSquare, 
   Clock,
-  MessageSquare
+  MessageSquare,
+  LayoutGrid,
+  ChevronDown
 } from "lucide-react";
 import { 
   getNotificationsAction, 
@@ -38,12 +40,17 @@ export default function Navbar() {
   
   // Notification states
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const notifDropdownRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
 
   // Chat states
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+
+  // User Dropdown states
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+  const avatarRef = useRef<HTMLDivElement>(null);
 
   // Đọc session từ mock cookie hoặc Supabase client
   useEffect(() => {
@@ -135,10 +142,10 @@ export default function Navbar() {
 
   // GSAP animation cho dropdown thông báo
   useEffect(() => {
-    if (showDropdown && dropdownRef.current) {
+    if (showNotifDropdown && notifDropdownRef.current) {
       const ctx = gsap.context(() => {
         gsap.fromTo(
-          dropdownRef.current,
+          notifDropdownRef.current,
           { scale: 0.95, opacity: 0, y: -10 },
           { scale: 1, opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }
         );
@@ -151,27 +158,50 @@ export default function Navbar() {
             { rotation: 0, duration: 0.4, ease: "elastic.out(1, 0.3)" }
           );
         }
-      }, dropdownRef);
+      }, notifDropdownRef);
       return () => ctx.revert();
     }
-  }, [showDropdown]);
+  }, [showNotifDropdown]);
+
+  // GSAP animation cho dropdown người dùng
+  useEffect(() => {
+    if (showUserDropdown && userDropdownRef.current) {
+      const ctx = gsap.context(() => {
+        gsap.fromTo(
+          userDropdownRef.current,
+          { scale: 0.95, opacity: 0, y: -10 },
+          { scale: 1, opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }
+        );
+      }, userDropdownRef);
+      return () => ctx.revert();
+    }
+  }, [showUserDropdown]);
 
   // Đóng dropdown khi click ngoài
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (
-        showDropdown &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node) &&
+        showNotifDropdown &&
+        notifDropdownRef.current &&
+        !notifDropdownRef.current.contains(e.target as Node) &&
         bellRef.current &&
         !bellRef.current.contains(e.target as Node)
       ) {
-        setShowDropdown(false);
+        setShowNotifDropdown(false);
+      }
+      if (
+        showUserDropdown &&
+        userDropdownRef.current &&
+        !userDropdownRef.current.contains(e.target as Node) &&
+        avatarRef.current &&
+        !avatarRef.current.contains(e.target as Node)
+      ) {
+        setShowUserDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [showDropdown]);
+  }, [showNotifDropdown, showUserDropdown]);
 
   const handleLogout = async () => {
     document.cookie = "mock-session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
@@ -193,7 +223,7 @@ export default function Navbar() {
 
   // Click vào 1 thông báo
   const handleNotifClick = async (notif: Notification) => {
-    setShowDropdown(false);
+    setShowNotifDropdown(false);
     if (!notif.is_read) {
       await markNotificationAsReadAction(notif.id);
       loadNotifications();
@@ -251,50 +281,69 @@ export default function Navbar() {
         <div className="flex items-center gap-4">
           {loading ? (
             <div className="flex items-center gap-2 animate-pulse">
-              <div className="w-20 h-8 bg-surface rounded-full"></div>
+              <div className="w-8 h-8 bg-surface rounded-full"></div>
               <div className="w-8 h-8 bg-surface rounded-full"></div>
             </div>
           ) : session ? (
             <div className="flex items-center gap-3">
-              {/* Chat Icon Link */}
+              {/* 1. Grid Menu Icon (Facebook-style) */}
+              <button 
+                className="w-10 h-10 rounded-full bg-surface hover:bg-hairline flex items-center justify-center text-charcoal transition-colors cursor-pointer"
+                title="Menu"
+              >
+                <LayoutGrid className="w-5 h-5 text-steel" />
+              </button>
+
+              {/* 2. Messenger Icon Link (Facebook-style) */}
               <div className="relative flex items-center justify-center">
                 <Link
                   href="/chat"
-                  className={`p-2 transition-all rounded-full hover:bg-surface relative flex items-center justify-center cursor-pointer ${
-                    pathname.startsWith("/chat") ? "text-brand-green bg-surface/50" : "text-stone hover:text-ink"
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                    pathname.startsWith("/chat") 
+                      ? "bg-brand-green/10 text-brand-green border border-brand-green/20" 
+                      : "bg-surface hover:bg-hairline text-steel hover:text-ink"
                   }`}
-                  title="Tin nhắn trực tuyến"
+                  title="Messenger"
                 >
-                  <MessageSquare className="w-4 h-4" />
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M12 2C6.36 2 2 6.13 2 11.7c0 3.22 1.45 6.06 3.75 7.9v3.7c0 .4.46.66.8.45l4.08-2.5c.44.08.9.15 1.37.15 5.64 0 10-4.13 10-9.7S17.64 2 12 2zm1.2 12.18l-2.4-2.55-4.7 2.55 5.17-5.5 2.43 2.55 4.67-2.55-5.17 5.5z"/>
+                  </svg>
                   {unreadMsgCount > 0 && (
-                    <span className="absolute top-1 right-1 w-4 h-4 bg-brand-green text-canvas text-[9px] font-bold rounded-full flex items-center justify-center border border-canvas scale-110 animate-bounce-short">
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-[#f02849] text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-canvas px-1 scale-110 animate-bounce-short">
                       {unreadMsgCount}
                     </span>
                   )}
                 </Link>
               </div>
 
-              {/* Notification Bell (Bell) */}
-              <div className="relative">
+              {/* 3. Notification Bell (Facebook-style) */}
+              <div className="relative flex items-center justify-center">
                 <button
                   ref={bellRef}
-                  onClick={() => setShowDropdown(!showDropdown)}
-                  className="p-2 text-stone hover:text-ink transition-all rounded-full hover:bg-surface relative cursor-pointer"
+                  onClick={() => {
+                    setShowNotifDropdown(!showNotifDropdown);
+                    setShowUserDropdown(false);
+                  }}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                    showNotifDropdown 
+                      ? "bg-brand-green/10 text-brand-green border border-brand-green/20" 
+                      : "bg-surface hover:bg-hairline text-steel hover:text-ink"
+                  }`}
                   title="Thông báo"
                 >
-                  <Bell className="w-4 h-4" />
+                  <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 w-4 h-4 bg-brand-green text-canvas text-[9px] font-bold rounded-full flex items-center justify-center border border-canvas scale-110 animate-bounce-short">
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-[#f02849] text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-canvas px-1 scale-110 animate-bounce-short">
                       {unreadCount}
                     </span>
                   )}
                 </button>
 
                 {/* Dropdown thông báo */}
-                {showDropdown && (
+                {showNotifDropdown && (
                   <div
-                    ref={dropdownRef}
-                    className="absolute right-0 mt-2.5 w-80 bg-canvas border border-hairline rounded-xl shadow-2xl overflow-hidden z-[99]"
+                    ref={notifDropdownRef}
+                    className="absolute right-0 mt-2.5 top-10 w-80 bg-canvas border border-hairline rounded-2xl shadow-2xl overflow-hidden z-[99]"
                     style={{ transformOrigin: "top right" }}
                   >
                     <div className="p-3.5 border-b border-hairline flex items-center justify-between bg-surface/30">
@@ -346,7 +395,7 @@ export default function Navbar() {
 
                     <div className="p-2 border-t border-hairline bg-surface/10 text-center">
                       <button
-                        onClick={() => setShowDropdown(false)}
+                        onClick={() => setShowNotifDropdown(false)}
                         className="text-[10px] font-bold text-charcoal hover:underline cursor-pointer"
                       >
                         Đóng cửa sổ
@@ -356,40 +405,83 @@ export default function Navbar() {
                 )}
               </div>
 
-              <div className="hidden sm:flex flex-col text-right">
-                <span className="text-xs font-bold text-ink max-w-[150px] truncate">
-                  {session.fullName}
-                </span>
-                <span className="text-[9px] uppercase tracking-wider font-semibold text-brand-green font-mono">
-                  {session.role === "freelancer" ? "Freelancer" : "Creator"}
-                </span>
+              {/* 4. Profile Avatar với Mũi tên ChevronDown lồng ở góc dưới bên phải */}
+              <div className="relative">
+                <div 
+                  ref={avatarRef}
+                  onClick={() => {
+                    setShowUserDropdown(!showUserDropdown);
+                    setShowNotifDropdown(false);
+                  }}
+                  className="w-10 h-10 rounded-full bg-charcoal text-on-dark flex items-center justify-center font-bold text-sm border border-hairline-dark hover:scale-105 active:scale-95 transition-all cursor-pointer relative"
+                  title="Tài khoản"
+                >
+                  {session.fullName.substring(0, 1).toUpperCase()}
+                  <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#3a3b3c] border border-canvas rounded-full flex items-center justify-center text-white text-[8px] hover:bg-[#4e4f50] transition-colors">
+                    <ChevronDown className="w-2.5 h-2.5" />
+                  </span>
+                </div>
+
+                {/* Dropdown Menu Tài khoản (Facebook-style) */}
+                {showUserDropdown && (
+                  <div
+                    ref={userDropdownRef}
+                    className="absolute right-0 mt-2.5 w-72 bg-canvas border border-hairline rounded-2xl shadow-2xl p-4 z-[99] space-y-3"
+                    style={{ transformOrigin: "top right" }}
+                  >
+                    {/* Header User info */}
+                    <div className="flex items-center gap-3 p-2 hover:bg-surface rounded-xl transition-colors cursor-pointer" onClick={() => router.push(getDashboardUrl())}>
+                      <div className="w-10 h-10 rounded-full bg-charcoal text-on-dark flex items-center justify-center font-bold text-sm shrink-0">
+                        {session.fullName.substring(0, 1).toUpperCase()}
+                      </div>
+                      <div className="overflow-hidden">
+                        <h4 className="text-xs font-bold text-ink truncate">{session.fullName}</h4>
+                        <p className="text-[9px] text-steel truncate leading-normal">{session.email}</p>
+                        <span className="text-[8px] uppercase tracking-wider font-semibold text-brand-green font-mono">
+                          {session.role === "freelancer" ? "Freelancer" : "Creator"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <hr className="border-t border-hairline-soft" />
+
+                    {/* Menu links */}
+                    <div className="space-y-1">
+                      <Link
+                        href={getDashboardUrl()}
+                        onClick={() => setShowUserDropdown(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface rounded-xl transition-colors text-xs font-semibold text-charcoal cursor-pointer"
+                      >
+                        <LayoutDashboard className="w-4 h-4 text-stone shrink-0" />
+                        <span>Bảng điều khiển (Dashboard)</span>
+                      </Link>
+
+                      <Link
+                        href={session.role === "freelancer" ? "/freelancer/profile" : "/creator/jobs"}
+                        onClick={() => setShowUserDropdown(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface rounded-xl transition-colors text-xs font-semibold text-charcoal cursor-pointer"
+                      >
+                        <UserIcon className="w-4 h-4 text-stone shrink-0" />
+                        <span>Cấu hình hồ sơ cá nhân</span>
+                      </Link>
+                    </div>
+
+                    <hr className="border-t border-hairline-soft" />
+
+                    {/* Logout Button */}
+                    <button
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        handleLogout();
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-red-50 text-brand-error rounded-xl transition-all text-xs font-semibold text-left cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 shrink-0" />
+                      <span>Đăng xuất tài khoản</span>
+                    </button>
+                  </div>
+                )}
               </div>
-              
-              {/* Initials Avatar */}
-              <Link 
-                href={getDashboardUrl()} 
-                className="w-9 h-9 rounded-full bg-charcoal text-on-dark flex items-center justify-center font-bold text-xs border border-hairline-dark hover:scale-105 active:scale-95 transition-transform"
-                title="Đi tới Dashboard của bạn"
-              >
-                {session.fullName.substring(0, 1).toUpperCase()}
-              </Link>
-
-              {/* Quick Dashboard Action */}
-              <Link
-                href={getDashboardUrl()}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-surface border border-hairline hover:bg-canvas rounded-full text-charcoal transition-colors cursor-pointer"
-              >
-                <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
-              </Link>
-
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                className="p-2 text-stone hover:text-brand-error transition-colors rounded-full hover:bg-surface cursor-pointer"
-                title="Đăng xuất"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
             </div>
           ) : (
             <div className="flex items-center gap-3">

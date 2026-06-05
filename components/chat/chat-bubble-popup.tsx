@@ -8,12 +8,14 @@ import {
   MessageSquare, 
   Send, 
   X, 
-  Minimize2, 
-  Maximize2, 
-  ExternalLink, 
-  Circle,
-  Clock,
-  Check
+  Minus,
+  Phone,
+  Video,
+  Plus,
+  Image as ImageIcon,
+  Smile,
+  ExternalLink,
+  ChevronDown
 } from "lucide-react";
 import { 
   getMessagesAction, 
@@ -291,6 +293,69 @@ export default function ChatBubblePopup() {
     }
   };
 
+  // Xử lý gửi nhanh Emoji (bóng đá, like)
+  const handleSendEmoji = async (emoji: string) => {
+    if (!activePartner || sending) return;
+    setSending(true);
+    try {
+      const res = await sendMessageAction("mock-job-general", activePartner.id, emoji);
+      if (res.success && res.data) {
+        setMessages((prev) => [...prev, res.data]);
+
+        // Giả lập auto-reply trong Mock Mode
+        const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || document.cookie.includes("mock-session=");
+        if (isMockMode) {
+          setTimeout(() => {
+            const replies = [
+              "Vâng ạ! Mình đã nhận được tin nhắn nổi.",
+              "Cảm ơn bạn nhé! Mình sẽ kiểm tra và phản hồi lại sớm nhất.",
+              "Vâng, bạn thấy bản demo/dự án của mình cần điều chỉnh gì thêm không?",
+              "Okay bạn, để mình cập nhật lại ngay ạ!"
+            ];
+            const randomReply = replies[Math.floor(Math.random() * replies.length)];
+
+            const getCookie = (name: string): string | null => {
+              if (typeof document === "undefined") return null;
+              const value = `; ${document.cookie}`;
+              const parts = value.split(`; ${name}=`);
+              if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+              return null;
+            };
+
+            const mockMessagesCookie = getCookie("mock-messages");
+            let currentMessages: Message[] = [];
+            if (mockMessagesCookie) {
+              try {
+                currentMessages = JSON.parse(decodeURIComponent(mockMessagesCookie));
+              } catch (e) {}
+            }
+
+            const autoMsg: Message = {
+              id: `mock-msg-popup-reply-${Date.now()}`,
+              job_id: "mock-job-general",
+              sender_id: activePartner.id,
+              sender_name: activePartner.fullName,
+              receiver_id: session?.role === "creator" ? "mock-creator-id" : "fl-1",
+              content: randomReply,
+              is_read: false,
+              created_at: new Date().toISOString()
+            };
+
+            currentMessages.push(autoMsg);
+            document.cookie = `mock-messages=${encodeURIComponent(JSON.stringify(currentMessages))}; path=/; max-age=2592000`;
+            
+            setMessages((prev) => [...prev, autoMsg]);
+            playNotificationSound();
+          }, 1500);
+        }
+      }
+    } catch (e) {
+      console.error("Lỗi gửi tin nhắn nổi:", e);
+    } finally {
+      setSending(false);
+    }
+  };
+
   if (isChatPage || !session) return null;
 
   return (
@@ -299,80 +364,128 @@ export default function ChatBubblePopup() {
       {isOpen && activePartner && (
         <div 
           ref={chatBoxRef}
-          className="w-80 h-96 bg-canvas border border-hairline rounded-2xl shadow-2xl overflow-hidden flex flex-col mb-4 bg-white/95 backdrop-blur-md"
+          className="w-[328px] h-[450px] bg-[#242526] border border-[#393a3b] rounded-2xl shadow-2xl overflow-hidden flex flex-col mb-4 select-none"
           style={{ transformOrigin: "bottom right" }}
         >
           {/* Header */}
-          <div className="h-12 bg-canvas-dark text-on-dark px-4 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <span className="w-2.5 h-2.5 rounded-full bg-brand-green shrink-0 animate-pulse"></span>
+          <div className="h-14 bg-[#242526] border-b border-[#393a3b] px-3 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2 overflow-hidden cursor-pointer" onClick={() => router.push(`/chat?u=${activePartner.id}`)}>
+              <div className="relative shrink-0">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-green to-emerald-500 text-white flex items-center justify-center font-bold text-sm border border-[#393a3b]">
+                  {activePartner.fullName.slice(0, 1).toUpperCase()}
+                </div>
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#31a24c] border-2 border-[#242526] shrink-0"></span>
+              </div>
               <div className="overflow-hidden">
-                <h4 className="text-xs font-bold text-on-dark truncate max-w-[150px]">
-                  {activePartner.fullName}
-                </h4>
-                <p className="text-[8px] text-on-dark-muted uppercase font-mono tracking-widest leading-none mt-0.5">
-                  {activePartner.role === "creator" ? "Creator" : "Freelancer"}
+                <div className="flex items-center gap-1">
+                  <h4 className="text-xs font-bold text-[#e4e6eb] truncate max-w-[130px]">
+                    {activePartner.fullName}
+                  </h4>
+                  <ChevronDown className="w-3.5 h-3.5 text-[#b0b3b8] shrink-0" />
+                </div>
+                <p className="text-[9px] text-[#b0b3b8] font-medium leading-none mt-0.5">
+                  Đang hoạt động
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-on-dark-muted">
-              {/* Fullscreen Button */}
-              <Link 
-                href={`/chat?u=${activePartner.id}`}
-                onClick={() => setIsOpen(false)}
-                className="p-1 hover:text-on-dark transition-colors rounded hover:bg-white/10"
-                title="Mở hộp thư đầy đủ"
+            <div className="flex items-center gap-1">
+              {/* Phone Call */}
+              <button 
+                type="button"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#a200ff] hover:bg-[#3a3b3c] transition-colors cursor-pointer"
+                title="Bắt đầu cuộc gọi thoại"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </Link>
+                <Phone className="w-4 h-4" />
+              </button>
+              {/* Video Call */}
+              <button 
+                type="button"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#a200ff] hover:bg-[#3a3b3c] transition-colors cursor-pointer"
+                title="Bắt đầu cuộc gọi video"
+              >
+                <Video className="w-4 h-4" />
+              </button>
               {/* Minimize Button */}
               <button 
+                type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1 hover:text-on-dark transition-colors rounded hover:bg-white/10 cursor-pointer"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#b0b3b8] hover:bg-[#3a3b3c] hover:text-[#e4e6eb] transition-colors cursor-pointer"
                 title="Thu nhỏ"
               >
-                <Minimize2 className="w-3.5 h-3.5" />
+                <Minus className="w-4 h-4" />
+              </button>
+              {/* Close Button */}
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  setActivePartner(null);
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#b0b3b8] hover:bg-[#3a3b3c] hover:text-[#e4e6eb] transition-colors cursor-pointer"
+                title="Đóng chat"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
           {/* Khung tin nhắn */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30 scrollbar-custom">
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-4 bg-[#18191a] scrollbar-custom flex flex-col">
             {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-4 text-stone space-y-2">
-                <MessageSquare className="w-6 h-6 text-hairline" />
-                <p className="text-[10px] font-semibold">Chưa có tin nhắn</p>
-                <p className="text-[9px] text-slate/70 leading-normal">
-                  Gửi lời chào đầu tiên để trao đổi về dự án nhé!
-                </p>
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-4 text-[#b0b3b8] space-y-3">
+                <div className="w-12 h-12 rounded-full bg-[#242526] flex items-center justify-center border border-[#393a3b]">
+                  <MessageSquare className="w-5 h-5 text-[#a200ff]" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#e4e6eb]">Chưa có tin nhắn</p>
+                  <p className="text-[10px] text-[#b0b3b8] mt-1 leading-normal max-w-[180px] mx-auto">
+                    Bắt đầu cuộc trò chuyện với {activePartner.fullName} ngay bây giờ.
+                  </p>
+                </div>
               </div>
             ) : (
-              messages.map((msg) => {
+              messages.map((msg, index) => {
                 const isOwn = msg.sender_id === (session.role === "creator" ? "mock-creator-id" : "fl-1");
+                const nextMsg = messages[index + 1];
+                const prevMsg = messages[index - 1];
+                
+                // Show name above bubble if incoming, and first in group
+                const showSenderName = !isOwn && (!prevMsg || prevMsg.sender_id !== msg.sender_id);
+                
                 return (
-                  <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                    <div className={`flex gap-1.5 max-w-[85%] items-end ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
+                  <div key={msg.id} className="space-y-1">
+                    {showSenderName && (
+                      <span className="text-[9px] text-[#b0b3b8] px-9 block font-bold">
+                        {msg.sender_name}
+                      </span>
+                    )}
+                    <div className={`flex ${isOwn ? "justify-end" : "justify-start"} items-end gap-2`}>
                       {!isOwn && (
-                        <div className="w-6 h-6 rounded-full bg-charcoal text-on-dark flex items-center justify-center font-bold text-[8px] shrink-0 border border-hairline-dark">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-brand-green to-emerald-500 text-white flex items-center justify-center font-bold text-[9px] shrink-0 border border-[#393a3b]">
                           {msg.sender_name.slice(0, 1).toUpperCase()}
                         </div>
                       )}
                       
-                      <div className="space-y-0.5">
-                        <div className={`p-2.5 text-[11px] leading-relaxed rounded-xl shadow-sm ${
-                          isOwn 
-                            ? "bg-ink text-on-dark rounded-br-none" 
-                            : "bg-surface text-charcoal rounded-bl-none border border-hairline-soft"
-                        }`}>
+                      <div className={`flex flex-col ${isOwn ? "items-end" : "items-start"} max-w-[70%]`}>
+                        <div 
+                          className={`px-3 py-2 text-[13px] leading-snug shadow-sm select-text ${
+                            isOwn 
+                              ? "bg-[#a200ff] text-white rounded-[18px] rounded-br-[4px]" 
+                              : "bg-[#3a3b3c] text-[#e4e6eb] rounded-[18px] rounded-bl-[4px]"
+                          }`}
+                        >
                           {msg.content}
                         </div>
-                        <span className="text-[7px] text-stone block px-1 text-right">
-                          {new Date(msg.created_at).toLocaleTimeString("vi-VN", {
-                            hour: "2-digit",
-                            minute: "2-digit"
-                          })}
-                        </span>
+                        
+                        {(!nextMsg || new Date(nextMsg.created_at).getTime() - new Date(msg.created_at).getTime() > 300000) && (
+                          <span className="text-[8px] text-[#b0b3b8] block mt-1 px-1">
+                            {new Date(msg.created_at).toLocaleTimeString("vi-VN", {
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            })}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -385,24 +498,90 @@ export default function ChatBubblePopup() {
           {/* Form input */}
           <form 
             onSubmit={handleSendMessage}
-            className="p-3 border-t border-hairline bg-surface/30 flex gap-2 shrink-0"
+            className="p-2.5 bg-[#242526] border-t border-[#393a3b] flex items-center gap-2 shrink-0"
           >
-            <input 
-              type="text" 
-              placeholder="Nhập nội dung tin nhắn..."
-              value={newMessageText}
-              onChange={(e) => setNewMessageText(e.target.value)}
-              className="flex-1 h-8 px-3 bg-canvas border border-hairline rounded-full text-[11px] text-charcoal focus:border-brand-green focus:outline-none transition-colors"
-              disabled={sending}
-              required
-            />
-            <button 
-              type="submit"
-              disabled={sending || !newMessageText.trim()}
-              className="w-8 h-8 bg-ink text-on-dark hover:bg-brand-green hover:text-canvas rounded-full flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-            </button>
+            {/* Left actions */}
+            <div className="flex items-center gap-1.5 text-[#a200ff]">
+              <button 
+                type="button"
+                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#3a3b3c] transition-colors cursor-pointer"
+                title="Mở rộng công cụ"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <button 
+                type="button"
+                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#3a3b3c] transition-colors cursor-pointer"
+                title="Gửi hình ảnh"
+              >
+                <ImageIcon className="w-4 h-4" />
+              </button>
+              <button 
+                type="button"
+                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#3a3b3c] transition-colors cursor-pointer"
+                title="Gửi nhãn dán"
+              >
+                <Smile className="w-4 h-4" />
+              </button>
+              <button 
+                type="button"
+                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#3a3b3c] transition-colors cursor-pointer text-[9px] font-black font-mono border-2 border-[#a200ff] leading-none flex items-center justify-center"
+                style={{ height: '24px', width: '28px' }}
+                title="Gửi ảnh GIF"
+              >
+                GIF
+              </button>
+            </div>
+
+            {/* Text input container */}
+            <div className="relative flex-1 flex items-center">
+              <input 
+                type="text" 
+                placeholder="Aa"
+                value={newMessageText}
+                onChange={(e) => setNewMessageText(e.target.value)}
+                className="w-full h-9 pl-4 pr-10 bg-[#3a3b3c] border-none rounded-full text-[13px] text-[#e4e6eb] placeholder-[#b0b3b8] focus:outline-none focus:bg-[#4e4f50] transition-colors"
+                disabled={sending}
+                required
+              />
+              <button
+                type="button"
+                className="absolute right-2.5 text-[#a200ff] hover:text-[#b27ef3] cursor-pointer"
+                title="Chèn biểu tượng cảm xúc"
+              >
+                <Smile className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Fast Send (Thumbs up or Football emoji if empty, Send icon if not empty) */}
+            {newMessageText.trim() ? (
+              <button 
+                type="submit"
+                disabled={sending}
+                className="w-9 h-9 text-[#a200ff] hover:bg-[#3a3b3c] rounded-full flex items-center justify-center shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="flex gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSendEmoji("⚽")}
+                  className="w-8 h-8 hover:bg-[#3a3b3c] rounded-full flex items-center justify-center text-lg transition-transform hover:scale-125 cursor-pointer"
+                  title="Gửi nhanh quả bóng"
+                >
+                  ⚽
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendEmoji("👍")}
+                  className="w-8 h-8 hover:bg-[#3a3b3c] rounded-full flex items-center justify-center text-lg transition-transform hover:scale-125 cursor-pointer"
+                  title="Gửi nhanh lượt thích"
+                >
+                  👍
+                </button>
+              </div>
+            )}
           </form>
         </div>
       )}
@@ -412,18 +591,19 @@ export default function ChatBubblePopup() {
         ref={bubbleRef}
         onClick={() => {
           if (!isOpen && !activePartner && session) {
-            // Khi chưa có ai nhắn, click vào bong bóng sẽ gợi ý mở chat page hoặc mở người chat gần nhất
             router.push("/chat");
           } else {
             setIsOpen(!isOpen);
           }
         }}
-        className="w-12 h-12 bg-brand-green text-canvas rounded-full shadow-lg hover:shadow-xl flex items-center justify-center border border-brand-green-soft hover:scale-105 active:scale-95 transition-all cursor-pointer relative"
+        className="w-14 h-14 bg-gradient-to-tr from-[#a200ff] to-[#0084ff] text-white rounded-full shadow-2xl hover:shadow-purple-500/20 flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer relative border border-white/10"
         title="Trò chuyện trực tuyến"
       >
-        <MessageSquare className="w-5 h-5 text-ink font-bold" />
+        <svg className="w-6 h-6 fill-current text-white" viewBox="0 0 24 24">
+          <path d="M12 2C6.36 2 2 6.13 2 11.7c0 3.22 1.45 6.06 3.75 7.9v3.7c0 .4.46.66.8.45l4.08-2.5c.44.08.9.15 1.37.15 5.64 0 10-4.13 10-9.7S17.64 2 12 2zm1.2 12.18l-2.4-2.55-4.7 2.55 5.17-5.5 2.43 2.55 4.67-2.55-5.17 5.5z"/>
+        </svg>
         {lastMessageCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-brand-error text-canvas text-[10px] font-bold rounded-full flex items-center justify-center border border-canvas animate-pulse scale-105">
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] bg-[#f02849] text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-[#18191a] px-1 scale-110 animate-bounce-short">
             {lastMessageCount}
           </span>
         )}
