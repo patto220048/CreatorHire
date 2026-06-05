@@ -42,7 +42,7 @@ export async function getVideoCommentsAction(jobId: string) {
         .from("video_comments")
         .select("*")
         .eq("job_id", jobId)
-        .order("timestamp", { ascending: true });
+        .order("created_at", { ascending: true });
 
       if (error) {
         return { error: `Lỗi đọc bình luận từ cơ sở dữ liệu: ${error.message}` };
@@ -103,8 +103,8 @@ export async function addVideoCommentAction(
       };
 
       currentComments.push(newComment);
-      // Sắp xếp comment theo thời gian tăng dần
-      currentComments.sort((a, b) => a.timestamp - b.timestamp);
+      // Sắp xếp comment theo thời gian tạo tăng dần (mới ở cuối)
+      currentComments.sort((a, b) => a.id.localeCompare(b.id));
 
       cookieStore.set(`mock-comments-${jobId}`, JSON.stringify(currentComments), {
         path: "/",

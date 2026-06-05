@@ -64,6 +64,7 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
   const [isSubmitPending, startSubmitTransition] = useTransition();
   const [currentUser, setCurrentUser] = useState<{ fullName: string; role: "creator" | "freelancer" } | null>(null);
   const [activeReviewJobId, setActiveReviewJobId] = useState<string | null>(null);
+  const activeReviewJob = activeJobs.find(j => j.id === activeReviewJobId);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -332,30 +333,10 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
                             </span>
                             <button
                               type="button"
-                              onClick={() => {
-                                const isOpening = activeReviewJobId !== job.id;
-                                setActiveReviewJobId(isOpening ? job.id : null);
-                                if (isOpening) {
-                                  setTimeout(() => {
-                                    const toolEl = document.getElementById(`video-review-${job.id}`);
-                                    if (toolEl) {
-                                      gsap.fromTo(
-                                        toolEl,
-                                        { height: 0, opacity: 0 },
-                                        { height: "auto", opacity: 1, duration: 0.4, ease: "power2.out" }
-                                      );
-                                    }
-                                  }, 50);
-                                }
-                              }}
-                              className={`h-8 px-3.5 border rounded-full text-[10px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                                activeReviewJobId === job.id
-                                  ? "bg-charcoal text-on-dark border-charcoal"
-                                  : "bg-surface border-hairline text-charcoal hover:bg-canvas"
-                              }`}
+                              onClick={() => setActiveReviewJobId(job.id)}
+                              className="h-8 px-3.5 border rounded-full text-[10px] font-bold bg-surface border-hairline text-charcoal hover:bg-canvas cursor-pointer flex items-center gap-1.5"
                             >
-                              <Video className="w-3.5 h-3.5" />
-                              {activeReviewJobId === job.id ? "Đóng phản hồi" : "Xem phản hồi (Timestamp)"}
+                              <Video className="w-3.5 h-3.5" /> Xem phản hồi (Timestamp)
                             </button>
                           </>
                         )}
@@ -460,21 +441,6 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
                         </form>
                       </div>
                     )}
-                    {/* Video Review Tool Panel */}
-                    {activeReviewJobId === job.id && (
-                      <div 
-                        id={`video-review-${job.id}`}
-                        className="overflow-hidden border-t border-hairline-soft pt-3"
-                        style={{ height: 0, opacity: 0 }}
-                      >
-                        <VideoReviewTool
-                          jobId={job.id}
-                          deliveryLink={job.delivery_link || ""}
-                          currentUserRole="freelancer"
-                          currentUserName={currentUser?.fullName || "Hoàng Minh (Editor)"}
-                        />
-                      </div>
-                    )}
                   </div>
                 );
               })
@@ -543,6 +509,45 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
           </div>
         </div>
       </div>
+
+      {/* Modal Popup cho Review Tool */}
+      {activeReviewJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-modal-backdrop">
+          <div className="bg-canvas border border-hairline w-full max-w-6xl h-[85vh] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-modal-box">
+            {/* Header */}
+            <div className="bg-surface border-b border-hairline p-4 flex items-center justify-between">
+              <div className="space-y-0.5 text-left">
+                <h3 className="text-xs font-black text-ink truncate max-w-[70vw] uppercase tracking-wider">
+                  {activeReviewJob.delivery_link?.toLowerCase().match(/\.(png|jpg|jpeg|webp|gif|svg)/) || activeReviewJob.delivery_link?.includes("unsplash") || activeReviewJob.delivery_link?.includes("mock-image") 
+                    ? "🖼️ Xem bản thảo ảnh & góp ý" 
+                    : activeReviewJob.delivery_link?.toLowerCase().match(/\.(pdf)/) || activeReviewJob.delivery_link?.includes("docs.google.com") || activeReviewJob.delivery_link?.includes("drive.google.com") || activeReviewJob.delivery_link?.includes("kich-ban") || activeReviewJob.delivery_link?.includes("script") || activeReviewJob.delivery_link?.includes("mock-doc")
+                      ? "📝 Xem kịch bản & phản hồi tài liệu" 
+                      : "🎬 Xem video nháp & góp ý mốc thời gian"}
+                </h3>
+                <p className="text-[10px] text-steel truncate max-w-[70vw]">
+                  Dự án: <strong className="text-charcoal">{activeReviewJob.title}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveReviewJobId(null)}
+                className="h-8 w-8 rounded-full border border-hairline bg-surface hover:bg-canvas text-stone hover:text-ink transition-all flex items-center justify-center font-bold text-xs cursor-pointer shadow-sm active:scale-95"
+              >
+                ✕
+              </button>
+            </div>
+            {/* Content */}
+            <div className="flex-1 overflow-hidden p-5 bg-surface-soft min-h-0">
+              <VideoReviewTool
+                jobId={activeReviewJob.id}
+                deliveryLink={activeReviewJob.delivery_link || ""}
+                currentUserRole="freelancer"
+                currentUserName={currentUser?.fullName || "Hoàng Minh (Editor)"}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

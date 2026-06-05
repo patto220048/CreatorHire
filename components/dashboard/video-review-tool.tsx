@@ -44,6 +44,87 @@ function formatTime(seconds: number) {
   return `${m}:${s}`;
 }
 
+// Helper phân tích loại sản phẩm bàn giao (video, image, document)
+function getDeliveryType(url: string): "video" | "image" | "document" {
+  const lowercase = url.toLowerCase();
+  if (
+    lowercase.endsWith(".png") ||
+    lowercase.endsWith(".jpg") ||
+    lowercase.endsWith(".jpeg") ||
+    lowercase.endsWith(".webp") ||
+    lowercase.endsWith(".gif") ||
+    lowercase.endsWith(".svg") ||
+    lowercase.includes("mock-image") ||
+    lowercase.includes("unsplash.com") ||
+    lowercase.includes("images.unsplash.com")
+  ) {
+    return "image";
+  }
+  if (
+    lowercase.endsWith(".pdf") ||
+    lowercase.includes("docs.google.com") ||
+    lowercase.includes("drive.google.com") ||
+    lowercase.includes("mock-doc") ||
+    lowercase.includes("pdf") ||
+    lowercase.includes("kich-ban") ||
+    lowercase.includes("script")
+  ) {
+    return "document";
+  }
+  return "video";
+}
+
+// Tự động chuyển đổi link Google Drive, Google Docs, Unsplash sang dạng cho phép nhúng/hiển thị trực tiếp
+function cleanDeliveryUrl(url: string, type: "video" | "image" | "document"): string {
+  let cleaned = url.trim();
+  
+  if (type === "document") {
+    // 1. Chuyển đổi Google Docs/Sheets từ /edit sang /preview để cho phép nhúng iframe
+    if (cleaned.includes("docs.google.com/document/d/")) {
+      cleaned = cleaned.replace(/\/edit(\?.*)?$/, "/preview");
+      if (!cleaned.includes("/preview")) {
+        const match = cleaned.match(/(.*\/document\/d\/[^/]+)/);
+        if (match) cleaned = match[1] + "/preview";
+      }
+    } else if (cleaned.includes("docs.google.com/spreadsheets/d/")) {
+      cleaned = cleaned.replace(/\/edit(\?.*)?$/, "/preview");
+      if (!cleaned.includes("/preview")) {
+        const match = cleaned.match(/(.*\/spreadsheets\/d\/[^/]+)/);
+        if (match) cleaned = match[1] + "/preview";
+      }
+    }
+    // 2. Chuyển đổi Google Drive file view sang /preview để hiển thị trong iframe
+    else if (cleaned.includes("drive.google.com/file/d/")) {
+      cleaned = cleaned.replace(/\/view(\?.*)?$/, "/preview");
+      if (!cleaned.includes("/preview")) {
+        const match = cleaned.match(/(.*\/file\/d\/[^/]+)/);
+        if (match) cleaned = match[1] + "/preview";
+      }
+    }
+  } else if (type === "image") {
+    // 1. Chuyển đổi link Google Drive view sang direct download link để hiển thị trong thẻ <img>
+    if (cleaned.includes("drive.google.com/file/d/")) {
+      const match = cleaned.match(/\/file\/d\/([^/]+)/);
+      if (match && match[1]) {
+        return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+      }
+    }
+    // 2. Chuyển đổi Unsplash page URL sang direct image URL
+    else if (cleaned.includes("unsplash.com/photos/")) {
+      const match = cleaned.match(/\/photos\/([^/?#]+)/);
+      if (match && match[1]) {
+        return `https://images.unsplash.com/photo-${match[1]}?w=1200&auto=format&fit=crop&q=80`;
+      }
+    }
+    // 3. Dropbox raw image redirect
+    else if (cleaned.includes("dropbox.com/s/")) {
+      cleaned = cleaned.replace("dl=0", "raw=1");
+    }
+  }
+  
+  return cleaned;
+}
+
 export default function VideoReviewTool({
   jobId,
   deliveryLink,
@@ -58,6 +139,9 @@ export default function VideoReviewTool({
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [documentPage, setDocumentPage] = useState(1);
+  const deliveryType = getDeliveryType(deliveryLink);
+  const cleanedUrl = cleanDeliveryUrl(deliveryLink, deliveryType);
   
   // Trạng thái load/lưu
   const [isPending, startTransition] = useTransition();
@@ -78,6 +162,12 @@ export default function VideoReviewTool({
   // Mock player timer ref
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const commentsEndRef = useRef<HTMLDivElement>(null);
+
+  // Tự động cuộn xuống cuối danh sách góp ý khi có góp ý mới
+  useEffect(() => {
+    commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [comments.length]);
 
   // 1. Tải danh sách comments từ server hoặc localStorage
   const loadComments = async () => {
@@ -462,7 +552,8 @@ export default function VideoReviewTool({
           };
 
           currentComments.push(newComment);
-          currentComments.sort((a, b) => a.timestamp - b.timestamp);
+          // Sắp xếp comment theo thời gian tạo tăng dần (mới ở cuối)
+          currentComments.sort((a, b) => a.id.localeCompare(b.id));
           localStorage.setItem(`mock-comments-${jobId}`, JSON.stringify(currentComments));
 
           // Kích hoạt sự kiện storage nội bộ để cập nhật realtime tức thì
@@ -509,14 +600,18 @@ export default function VideoReviewTool({
 
   // 7. Click hiển thị hình ảnh nét vẽ đè lên
   const handleCommentSelect = (comment: VideoComment) => {
-    seekTo(comment.timestamp);
-    setActiveCommentId(comment.id);
-
-    // Tạm dừng video để xem nét vẽ
-    if (isPlaying) {
-      if (ytPlayerRef.current) ytPlayerRef.current.pauseVideo();
-      setIsPlaying(false);
+    if (deliveryType === "video") {
+      seekTo(comment.timestamp);
+      // Tạm dừng video để xem nét vẽ
+      if (isPlaying) {
+        if (ytPlayerRef.current) ytPlayerRef.current.pauseVideo();
+        setIsPlaying(false);
+      }
+    } else if (deliveryType === "document") {
+      setDocumentPage(comment.timestamp);
     }
+    
+    setActiveCommentId(comment.id);
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -537,12 +632,92 @@ export default function VideoReviewTool({
   };
 
   return (
-    <div ref={containerRef} className="grid grid-cols-1 lg:grid-cols-3 gap-6 bg-canvas border border-hairline p-5 rounded-lg shadow-sm font-sans w-full">
-      {/* Cột 1 & 2: Trình phát video */}
-      <div className="lg:col-span-2 space-y-4">
+    <div ref={containerRef} className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans w-full h-full min-h-0 bg-transparent border-none p-0">
+      {/* Cột 1 & 2: Trình phát video / ảnh / tài liệu */}
+      <div className="lg:col-span-2 flex flex-col h-full justify-between gap-3 min-h-0">
         {/* Khung phát video với Canvas Overlay */}
-        <div className="relative aspect-video w-full bg-black rounded-lg overflow-hidden border border-hairline-dark select-none shadow-md group">
-          {ytId ? (
+        <div className="relative w-full bg-black rounded-lg overflow-hidden border border-hairline-dark select-none shadow-md group flex-1 min-h-0 flex items-center justify-center">
+          {deliveryType === "image" ? (
+            <div className="w-full h-full flex items-center justify-center bg-zinc-900 relative">
+              <img 
+                src={cleanedUrl} 
+                alt="Bản thảo ảnh" 
+                className="max-w-full max-h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800";
+                }}
+              />
+            </div>
+          ) : deliveryType === "document" ? (
+            // Document Viewer
+            <div className="w-full h-full bg-zinc-950 text-stone flex flex-col relative overflow-hidden">
+              {cleanedUrl.includes("docs.google.com") || cleanedUrl.includes("drive.google.com") ? (
+                <iframe src={cleanedUrl} className="w-full h-full border-none bg-white" />
+              ) : (
+                // Mock Script Reader showing page-by-page layout
+                <div className="flex-1 p-5 font-mono text-[11px] leading-relaxed overflow-y-auto bg-zinc-900 text-zinc-300">
+                  <div className="border-b border-zinc-800 pb-2 mb-3 text-center text-zinc-500 text-[10px] uppercase tracking-widest font-sans font-bold">
+                    Khung đọc kịch bản nháp (Trang {documentPage})
+                  </div>
+                  
+                  {documentPage === 1 && (
+                    <div className="space-y-4 text-left">
+                      <p className="text-center font-bold text-zinc-100 text-xs">CREATORHIRE TVC SCRIPT - VERSION 1.2</p>
+                      <p className="text-center text-zinc-500 text-[9px]">Người viết: Đội ngũ biên kịch CreatorHire | Ngày: 05/06/2026</p>
+                      <p className="text-zinc-500 mt-6 font-bold">--- TRANG 1 ---</p>
+                      <p><span className="text-zinc-500 font-bold">[001] NGOẠI - ĐƯỜNG PHỐ - BAN NGÀY</span></p>
+                      <p className="pl-4 italic text-zinc-400">Không khí tấp nập của đường phố Sài Gòn. Tiếng còi xe inh ỏi. Camera lia từ trên cao xuống một quán cafe vỉa hè.</p>
+                      <p className="pl-8"><span className="font-bold text-brand-green">NAM (EDITOR)</span> đang ôm chiếc máy tính xách tay cũ kỹ. Vẻ mặt đờ đẫn, tay run run gõ bàn phím.</p>
+                      <p className="pl-12 text-zinc-200">NAM: "Lại trễ deadline nữa rồi... Khách hàng còn chưa trả tiền ký quỹ. Sống sao đây?"</p>
+                    </div>
+                  )}
+
+                  {documentPage === 2 && (
+                    <div className="space-y-4 text-left">
+                      <p className="text-zinc-500 font-bold">--- TRANG 2 ---</p>
+                      <p><span className="text-zinc-500 font-bold">[002] NỘI - PHÒNG LÀM VIỆC CREATOR - BAN ĐÊM</span></p>
+                      <p className="pl-4 italic text-zinc-400">Ánh sáng phát ra từ màn hình PC lớn. Phòng làm việc bày biện nhiều máy quay, đèn led neon đẹp mắt.</p>
+                      <p className="pl-8"><span className="font-bold text-brand-green">LAN (CREATOR)</span> đang lướt mạng, thở dài chán nản nhìn kênh Youtube của mình.</p>
+                      <p className="pl-12 text-zinc-200">LAN: "Video edit chán quá, tụt view thê thảm. Phải tìm editor mới thôi. Nhưng thuê ngoài sợ bị lừa tiền hoặc sản phẩm không đúng ý..."</p>
+                      <p className="pl-8"><span className="italic text-zinc-400">Lan bất chợt lướt thấy trang web CreatorHire.vn</span></p>
+                      <p className="pl-12 text-zinc-200">LAN: "Ủa, trang này có hệ thống ký quỹ bảo mật tự động hả? Để đăng tin thử xem sao."</p>
+                    </div>
+                  )}
+
+                  {documentPage >= 3 && (
+                    <div className="space-y-4 text-left">
+                      <p className="text-zinc-500 font-bold">--- TRANG {documentPage} ---</p>
+                      <p><span className="text-zinc-500 font-bold">[003] NGOẠI - QUÁN CAFE HẸN GẶP - BAN NGÀY</span></p>
+                      <p className="pl-4 italic text-zinc-400">Nam và Lan ngồi đối diện nhau, gương mặt hào hứng. Trên bàn là ly nước và chiếc laptop đang chạy sản phẩm hoàn chỉnh.</p>
+                      <p className="pl-12 text-zinc-200">LAN: "Đúng ý em rồi! Edit giật giật khớp nhạc, màu sắc bắt mắt lắm!"</p>
+                      <p className="pl-12 text-zinc-200">NAM: "Dạ, nhờ nền tảng CreatorHire giữ tiền ký quỹ nên em rất yên tâm tập trung làm bài, không sợ bị bùng nữa."</p>
+                      <p className="pl-8 italic text-zinc-500">Cả hai bắt tay vui vẻ. Logo CreatorHire hiện lên cùng slogan: "Kết nối uy tín - Ký quỹ an toàn".</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Điều khiển trang kịch bản */}
+              <div className="bg-zinc-950 border-t border-zinc-800 p-2 flex justify-between items-center text-[10px] text-zinc-400 select-none">
+                <button 
+                  type="button"
+                  onClick={() => setDocumentPage(prev => Math.max(1, prev - 1))}
+                  className="px-2 py-1 bg-zinc-800 rounded hover:bg-zinc-700 disabled:opacity-30 cursor-pointer"
+                  disabled={documentPage === 1}
+                >
+                  Trang trước
+                </button>
+                <span>Trang {documentPage}</span>
+                <button 
+                  type="button"
+                  onClick={() => setDocumentPage(prev => prev + 1)}
+                  className="px-2 py-1 bg-zinc-800 rounded hover:bg-zinc-700 cursor-pointer"
+                >
+                  Trang sau
+                </button>
+              </div>
+            </div>
+          ) : ytId ? (
             // YouTube Player
             <div className="w-full h-full pointer-events-none">
               <div id={ytContainerId} className="w-full h-full"></div>
@@ -575,19 +750,21 @@ export default function VideoReviewTool({
           )}
 
           {/* LỚP CANVAS VẼ TAY (Drawing Layer) */}
-          <canvas
-            ref={canvasRef}
-            onMouseDown={isDrawingMode ? startDrawing : undefined}
-            onMouseMove={isDrawingMode ? draw : undefined}
-            onMouseUp={isDrawingMode ? stopDrawing : undefined}
-            onMouseLeave={isDrawingMode ? stopDrawing : undefined}
-            className={`absolute inset-0 w-full h-full z-20 ${
-              isDrawingMode ? "cursor-crosshair pointer-events-auto" : "pointer-events-none"
-            }`}
-          />
+          {deliveryType !== "document" && (
+            <canvas
+              ref={canvasRef}
+              onMouseDown={isDrawingMode ? startDrawing : undefined}
+              onMouseMove={isDrawingMode ? draw : undefined}
+              onMouseUp={isDrawingMode ? stopDrawing : undefined}
+              onMouseLeave={isDrawingMode ? stopDrawing : undefined}
+              className={`absolute inset-0 w-full h-full z-20 ${
+                isDrawingMode ? "cursor-crosshair pointer-events-auto" : "pointer-events-none"
+              }`}
+            />
+          )}
 
           {/* overlay khi bật chế độ vẽ để Creator biết */}
-          {isDrawingMode && (
+          {isDrawingMode && deliveryType !== "document" && (
             <div className="absolute top-4 left-4 z-30 bg-red-500/20 border border-red-500/30 px-3 py-1 rounded text-[9px] font-bold text-red-400 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
               <span className="w-2 h-2 rounded-full bg-red-500"></span> Chế độ vẽ lỗi nháp
             </div>
@@ -595,105 +772,155 @@ export default function VideoReviewTool({
         </div>
 
         {/* Bảng điều khiển Trình phát custom */}
-        <div className="bg-surface border border-hairline p-3 rounded-lg flex flex-col gap-3">
+        <div className="bg-surface border border-hairline p-3 rounded-lg flex flex-col gap-3 shrink-0">
           {/* Thanh Tiến trình (Timeline Scrubbing) */}
-          <div className="space-y-1">
-            <div 
-              onClick={handleTimelineClick}
-              className="h-2 w-full bg-hairline-soft rounded-full cursor-pointer relative overflow-visible hover:h-2.5 transition-all"
-            >
+          {deliveryType === "video" && (
+            <div className="space-y-1">
               <div 
-                className="h-full bg-brand-green rounded-full relative" 
-                style={{ width: `${(currentTime / duration) * 100}%` }}
+                onClick={handleTimelineClick}
+                className="h-2 w-full bg-hairline-soft rounded-full cursor-pointer relative overflow-visible hover:h-2.5 transition-all"
               >
-                {/* Đầu phát trượt */}
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-brand-green border border-canvas rounded-full shadow-md scale-0 group-hover:scale-100 transition-transform"></div>
+                <div 
+                  className="h-full bg-brand-green rounded-full relative" 
+                  style={{ width: `${(currentTime / duration) * 100}%` }}
+                >
+                  {/* Đầu phát trượt */}
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-brand-green border border-canvas rounded-full shadow-md scale-0 group-hover:scale-100 transition-transform"></div>
+                </div>
+              </div>
+              <div className="flex justify-between items-center text-[10px] text-steel font-mono font-semibold">
+                <span>{formatTime(currentTime)}</span>
+                <span>{formatTime(duration)}</span>
               </div>
             </div>
-            <div className="flex justify-between items-center text-[10px] text-steel font-mono font-semibold">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-          </div>
+          )}
 
           {/* Các nút bấm Play/Pause, Mute, Vẽ */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={togglePlay}
-                className="w-8 h-8 bg-ink text-on-dark rounded-full flex items-center justify-center hover:bg-charcoal transition-all scale-100 active:scale-95 cursor-pointer"
-                title={isPlaying ? "Tạm dừng" : "Phát"}
-              >
-                {isPlaying ? <Pause className="w-3.5 h-3.5 fill-on-dark" /> : <Play className="w-3.5 h-3.5 fill-on-dark translate-x-[1px]" />}
-              </button>
+              {deliveryType === "video" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    className="w-8 h-8 bg-ink text-on-dark rounded-full flex items-center justify-center hover:bg-charcoal transition-all scale-100 active:scale-95 cursor-pointer"
+                    title={isPlaying ? "Tạm dừng" : "Phát"}
+                  >
+                    {isPlaying ? <Pause className="w-3.5 h-3.5 fill-on-dark" /> : <Play className="w-3.5 h-3.5 fill-on-dark translate-x-[1px]" />}
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => seekTo(0)}
-                className="p-1.5 text-stone hover:text-ink transition-colors rounded hover:bg-hairline-soft cursor-pointer"
-                title="Quay về đầu"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => seekTo(0)}
+                    className="p-1.5 text-stone hover:text-ink transition-colors rounded hover:bg-hairline-soft cursor-pointer"
+                    title="Quay về đầu"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
 
-              <div className="h-4 w-[1px] bg-hairline"></div>
+                  <div className="h-4 w-[1px] bg-hairline"></div>
+                </>
+              )}
 
               {/* Bật tắt chế độ vẽ bút đỏ */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (isPlaying) {
-                    if (ytPlayerRef.current) ytPlayerRef.current.pauseVideo();
-                    setIsPlaying(false);
-                  }
-                  setIsDrawingMode(!isDrawingMode);
-                }}
-                className={`h-7 px-3 text-[10px] font-bold rounded-full border transition-all flex items-center gap-1 cursor-pointer ${
-                  isDrawingMode 
-                    ? "bg-red-500/10 border-red-500/30 text-red-500" 
-                    : "bg-surface border-hairline text-charcoal hover:bg-canvas"
-                }`}
-                title="Bật bảng vẽ tay khoanh tròn chỉ lỗi"
-              >
-                <Edit2 className="w-3 h-3" /> {isDrawingMode ? "Tắt vẽ nháp" : "Vẽ chỉ lỗi"}
-              </button>
+              {deliveryType !== "document" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isPlaying) {
+                        if (ytPlayerRef.current) ytPlayerRef.current.pauseVideo();
+                        setIsPlaying(false);
+                      }
+                      setIsDrawingMode(!isDrawingMode);
+                    }}
+                    className={`h-7 px-3 text-[10px] font-bold rounded-full border transition-all flex items-center gap-1 cursor-pointer ${
+                      isDrawingMode 
+                        ? "bg-red-500/10 border-red-500/30 text-red-500" 
+                        : "bg-surface border-hairline text-charcoal hover:bg-canvas"
+                    }`}
+                    title="Bật bảng vẽ tay khoanh tròn chỉ lỗi"
+                  >
+                    <Edit2 className="w-3 h-3" /> {isDrawingMode ? "Tắt vẽ nháp" : "Vẽ chỉ lỗi"}
+                  </button>
 
-              {isDrawingMode && (
-                <button
-                  type="button"
-                  onClick={clearCanvas}
-                  className="p-1 text-stone hover:text-red-500 transition-colors rounded cursor-pointer"
-                  title="Xóa nét vẽ hiện tại"
-                >
-                  <Eraser className="w-3.5 h-3.5" />
-                </button>
+                  {isDrawingMode && (
+                    <button
+                      type="button"
+                      onClick={clearCanvas}
+                      className="p-1 text-stone hover:text-red-500 transition-colors rounded cursor-pointer"
+                      title="Xóa nét vẽ hiện tại"
+                    >
+                      <Eraser className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </>
+              )}
+
+              {deliveryType === "document" && (
+                <div className="text-[10px] text-zinc-500 font-bold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-green"></span>
+                  Chế độ duyệt kịch bản tài liệu
+                </div>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={toggleMute}
-                className="p-1.5 text-stone hover:text-ink transition-colors rounded hover:bg-hairline-soft cursor-pointer"
-                title={isMuted ? "Mở âm thanh" : "Tắt tiếng"}
-              >
-                {isMuted ? <VolumeX className="w-4 h-4 text-red-500" /> : <Volume2 className="w-4 h-4" />}
-              </button>
-            </div>
+            {deliveryType === "video" && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className="p-1.5 text-stone hover:text-ink transition-colors rounded hover:bg-hairline-soft cursor-pointer"
+                  title={isMuted ? "Mở âm thanh" : "Tắt tiếng"}
+                >
+                  {isMuted ? <VolumeX className="w-4 h-4 text-red-500" /> : <Volume2 className="w-4 h-4" />}
+                </button>
+              </div>
+            )}
+            
+            {deliveryType === "image" && (
+              <div className="text-[10px] text-zinc-500 font-bold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-green"></span>
+                Chế độ duyệt bản vẽ ảnh
+              </div>
+            )}
           </div>
         </div>
 
         {/* Biểu mẫu góp ý dưới player */}
-        <form onSubmit={handleSubmitComment} className="bg-surface border border-hairline p-4 rounded-lg space-y-3">
+        <form onSubmit={handleSubmitComment} className="bg-surface border border-hairline p-4 rounded-lg space-y-3 shrink-0">
           <div className="flex items-center justify-between border-b border-hairline-soft pb-2">
             <span className="text-[11px] font-bold text-ink flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-brand-green" /> Thêm bình luận góp ý tại mốc: 
-              <span className="font-mono text-brand-green bg-brand-green/10 border border-brand-green/20 px-2 py-0.5 rounded text-xs font-bold">
-                {formatTime(currentTime)}
-              </span>
+              {deliveryType === "video" ? (
+                <>
+                  <Clock className="w-3.5 h-3.5 text-brand-green" /> Thêm bình luận góp ý tại mốc: 
+                  <span className="font-mono text-brand-green bg-brand-green/10 border border-brand-green/20 px-2 py-0.5 rounded text-xs font-bold">
+                    {formatTime(currentTime)}
+                  </span>
+                </>
+              ) : deliveryType === "document" ? (
+                <>
+                  <Clock className="w-3.5 h-3.5 text-brand-green" /> Thêm bình luận góp ý tại: 
+                  <div className="flex items-center gap-1 font-mono">
+                    <span className="text-zinc-600 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded text-[10px] font-bold">
+                      Trang
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={documentPage}
+                      onChange={(e) => setDocumentPage(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-10 text-center text-brand-green bg-brand-green/10 border border-brand-green/20 rounded text-[11px] font-bold focus:outline-none"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Clock className="w-3.5 h-3.5 text-brand-green" /> Thêm bình luận góp ý trên ảnh
+                </>
+              )}
             </span>
-            {isDrawingMode && hasDrawnRef.current && (
+            {isDrawingMode && hasDrawnRef.current && deliveryType !== "document" && (
               <span className="text-[10px] text-red-500 font-bold bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
                 ✏️ Kèm theo nét vẽ
               </span>
@@ -703,14 +930,24 @@ export default function VideoReviewTool({
           <textarea
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Ví dụ: Đoạn này cần cắt ngắn đi 3 giây / Chèn nhạc nền kịch tính hơn ở giây này..."
+            placeholder={
+              deliveryType === "video"
+                ? "Ví dụ: Đoạn này cần cắt ngắn đi 3 giây / Chèn nhạc nền kịch tính hơn ở giây này..."
+                : deliveryType === "document"
+                ? "Ví dụ: Sửa lại thoại nhân vật Nam / Cảnh 2 mô tả chi tiết biểu cảm Lan hơn..."
+                : "Ví dụ: Phần logo màu hơi tối / Khoanh tròn chỗ bị vỡ ảnh..."
+            }
             className="w-full h-20 p-2.5 bg-canvas border border-hairline rounded text-xs focus:border-brand-green focus:outline-none resize-none text-charcoal"
             disabled={isPending}
           />
 
           <div className="flex justify-between items-center gap-4">
             <div className="text-[10px] text-steel">
-              Mẹo: Nhấn nút <strong>"Vẽ chỉ lỗi"</strong> phía trên trước khi ghi góp ý để khoanh vùng khoảnh khắc bị lỗi.
+              {deliveryType === "video"
+                ? "Mẹo: Nhấn nút \"Vẽ chỉ lỗi\" phía trên trước khi ghi góp ý để khoanh vùng khoảnh khắc bị lỗi."
+                : deliveryType === "image"
+                ? "Mẹo: Nhấp vào \"Vẽ chỉ lỗi\" để vẽ trực tiếp khoanh vùng chỗ cần sửa trên bức ảnh."
+                : "Mẹo: Chọn đúng số trang muốn góp ý trước khi bấm gửi."}
             </div>
             <button
               type="submit"
@@ -724,7 +961,7 @@ export default function VideoReviewTool({
       </div>
 
       {/* Cột 3: Danh sách góp ý bên phải */}
-      <div className="flex flex-col h-full space-y-3">
+      <div className="flex flex-col h-full space-y-3 min-h-0">
         <div className="border-b border-hairline-soft pb-2 flex items-center justify-between">
           <h4 className="text-xs font-black uppercase tracking-wider text-ink flex items-center gap-1.5">
             <MessageSquare className="w-4 h-4 text-brand-green" /> Danh sách góp ý ({comments.length})
@@ -744,10 +981,10 @@ export default function VideoReviewTool({
         )}
 
         {/* Khung scroll bình luận */}
-        <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-2.5 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 scrollbar-thin min-h-0">
           {comments.length === 0 ? (
             <div className="text-center py-12 text-stone text-[11px] border border-dashed border-hairline rounded-lg bg-surface">
-              Chưa có góp ý nào cho video này.<br />Phát video và để lại góp ý đầu tiên!
+              Chưa có góp ý nào cho sản phẩm này.<br />Xem sản phẩm và để lại góp ý đầu tiên!
             </div>
           ) : (
             comments.map((comment) => {
@@ -773,12 +1010,24 @@ export default function VideoReviewTool({
                       </span>
                     </div>
 
-                    {/* Mốc thời gian comment */}
+                    {/* Mốc hiển thị (Thời gian / Trang / Ảnh) */}
                     <button
                       type="button"
                       className="px-2 py-0.5 bg-brand-green/10 border border-brand-green/25 text-brand-green rounded font-mono text-[10px] font-bold flex items-center gap-0.5 hover:bg-brand-green/20 active:scale-95 transition-all"
                     >
-                      <Clock className="w-2.5 h-2.5" /> {formatTime(comment.timestamp)}
+                      {deliveryType === "video" ? (
+                        <>
+                          <Clock className="w-2.5 h-2.5" /> {formatTime(comment.timestamp)}
+                        </>
+                      ) : deliveryType === "document" ? (
+                        <>
+                          Trang {comment.timestamp}
+                        </>
+                      ) : (
+                        <>
+                          Ảnh
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -798,6 +1047,7 @@ export default function VideoReviewTool({
               );
             })
           )}
+          <div ref={commentsEndRef} />
         </div>
       </div>
     </div>

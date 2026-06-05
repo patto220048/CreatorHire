@@ -54,6 +54,7 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<{ fullName: string; role: "creator" | "freelancer" } | null>(null);
   const [activeReviewJobId, setActiveReviewJobId] = useState<string | null>(null);
+  const activeReviewJob = jobs.find(j => j.id === activeReviewJobId);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -337,30 +338,10 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
                           <div className="flex flex-wrap items-center gap-3 shrink-0">
                             <button
                               type="button"
-                              onClick={() => {
-                                const isOpening = activeReviewJobId !== job.id;
-                                setActiveReviewJobId(isOpening ? job.id : null);
-                                if (isOpening) {
-                                  setTimeout(() => {
-                                    const toolEl = document.getElementById(`video-review-${job.id}`);
-                                    if (toolEl) {
-                                      gsap.fromTo(
-                                        toolEl,
-                                        { height: 0, opacity: 0 },
-                                        { height: "auto", opacity: 1, duration: 0.4, ease: "power2.out" }
-                                      );
-                                    }
-                                  }, 50);
-                                }
-                              }}
-                              className={`h-9 px-4 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
-                                activeReviewJobId === job.id
-                                  ? "bg-charcoal text-on-dark border-charcoal"
-                                  : "bg-surface text-charcoal border-hairline hover:bg-canvas"
-                              }`}
+                              onClick={() => setActiveReviewJobId(job.id)}
+                              className="h-9 px-4 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border bg-surface text-charcoal border-hairline hover:bg-canvas"
                             >
-                              <Video className="w-3.5 h-3.5" /> 
-                              {activeReviewJobId === job.id ? "Đóng phản hồi" : "Duyệt video & sửa nháp (Timestamp)"}
+                              <Video className="w-3.5 h-3.5" /> Duyệt video & sửa nháp (Timestamp)
                             </button>
 
                             <button
@@ -373,22 +354,6 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
                             </button>
                           </div>
                         </div>
-
-                        {/* Video Review Tool Panel */}
-                        {activeReviewJobId === job.id && (
-                          <div 
-                            id={`video-review-${job.id}`}
-                            className="overflow-hidden border-t border-hairline-soft pt-4"
-                            style={{ height: 0, opacity: 0 }}
-                          >
-                            <VideoReviewTool
-                              jobId={job.id}
-                              deliveryLink={job.delivery_link || ""}
-                              currentUserRole="creator"
-                              currentUserName={currentUser?.fullName || "Huy Nguyễn (Creator)"}
-                            />
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="bg-surface p-4 rounded border border-hairline-soft text-center text-xs text-stone flex items-center justify-center gap-2">
@@ -566,6 +531,45 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
           </div>
         )}
       </div>
+
+      {/* Modal Popup cho Review Tool */}
+      {activeReviewJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-modal-backdrop">
+          <div className="bg-canvas border border-hairline w-full max-w-6xl h-[85vh] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-modal-box">
+            {/* Header */}
+            <div className="bg-surface border-b border-hairline p-4 flex items-center justify-between">
+              <div className="space-y-0.5 text-left">
+                <h3 className="text-xs font-black text-ink truncate max-w-[70vw] uppercase tracking-wider">
+                  {activeReviewJob.delivery_link?.toLowerCase().match(/\.(png|jpg|jpeg|webp|gif|svg)/) || activeReviewJob.delivery_link?.includes("unsplash") || activeReviewJob.delivery_link?.includes("mock-image") 
+                    ? "🖼️ Duyệt bản thảo ảnh & sửa lỗi" 
+                    : activeReviewJob.delivery_link?.toLowerCase().match(/\.(pdf)/) || activeReviewJob.delivery_link?.includes("docs.google.com") || activeReviewJob.delivery_link?.includes("drive.google.com") || activeReviewJob.delivery_link?.includes("kich-ban") || activeReviewJob.delivery_link?.includes("script") || activeReviewJob.delivery_link?.includes("mock-doc")
+                      ? "📝 Duyệt kịch bản & phản hồi tài liệu" 
+                      : "🎬 Duyệt video nháp & góp ý mốc thời gian"}
+                </h3>
+                <p className="text-[10px] text-steel truncate max-w-[70vw]">
+                  Dự án: <strong className="text-charcoal">{activeReviewJob.title}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveReviewJobId(null)}
+                className="h-8 w-8 rounded-full border border-hairline bg-surface hover:bg-canvas text-stone hover:text-ink transition-all flex items-center justify-center font-bold text-xs cursor-pointer shadow-sm active:scale-95"
+              >
+                ✕
+              </button>
+            </div>
+            {/* Content */}
+            <div className="flex-1 overflow-hidden p-5 bg-surface-soft min-h-0">
+              <VideoReviewTool
+                jobId={activeReviewJob.id}
+                deliveryLink={activeReviewJob.delivery_link || ""}
+                currentUserRole="creator"
+                currentUserName={currentUser?.fullName || "Huy Nguyễn (Creator)"}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
