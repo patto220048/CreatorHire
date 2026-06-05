@@ -24,7 +24,11 @@ import {
   markAllNotificationsAsReadAction, 
   Notification 
 } from "@/app/api/notifications/actions";
-import { getUnreadMessageCountAction } from "@/app/api/chat/actions";
+import { 
+  getUnreadMessageCountAction,
+  getChatPartnersAction,
+  ChatPartner
+} from "@/app/api/chat/actions";
 
 interface UserSession {
   email: string;
@@ -46,6 +50,13 @@ export default function Navbar() {
 
   // Chat states
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+
+  // Messenger Dropdown states
+  const [showChatDropdown, setShowChatDropdown] = useState(false);
+  const [chatPartners, setChatPartners] = useState<ChatPartner[]>([]);
+  const [loadingChatPartners, setLoadingChatPartners] = useState(false);
+  const chatDropdownRef = useRef<HTMLDivElement>(null);
+  const messengerRef = useRef<HTMLButtonElement>(null);
 
   // User Dropdown states
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -123,6 +134,28 @@ export default function Navbar() {
     }
   };
 
+  // Tải danh sách cuộc trò chuyện gần đây
+  const loadChatPartners = async () => {
+    if (!session) return;
+    setLoadingChatPartners(true);
+    try {
+      const res = await getChatPartnersAction();
+      if (res.success && res.data) {
+        setChatPartners(res.data);
+      }
+    } catch (e) {
+      console.error("Lỗi tải đối tác chat navbar:", e);
+    } finally {
+      setLoadingChatPartners(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showChatDropdown) {
+      loadChatPartners();
+    }
+  }, [showChatDropdown]);
+
   useEffect(() => {
     if (session) {
       loadNotifications();
@@ -177,6 +210,20 @@ export default function Navbar() {
     }
   }, [showUserDropdown]);
 
+  // GSAP animation cho dropdown chat
+  useEffect(() => {
+    if (showChatDropdown && chatDropdownRef.current) {
+      const ctx = gsap.context(() => {
+        gsap.fromTo(
+          chatDropdownRef.current,
+          { scale: 0.95, opacity: 0, y: -10 },
+          { scale: 1, opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }
+        );
+      }, chatDropdownRef);
+      return () => ctx.revert();
+    }
+  }, [showChatDropdown]);
+
   // Đóng dropdown khi click ngoài
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -190,6 +237,15 @@ export default function Navbar() {
         setShowNotifDropdown(false);
       }
       if (
+        showChatDropdown &&
+        chatDropdownRef.current &&
+        !chatDropdownRef.current.contains(e.target as Node) &&
+        messengerRef.current &&
+        !messengerRef.current.contains(e.target as Node)
+      ) {
+        setShowChatDropdown(false);
+      }
+      if (
         showUserDropdown &&
         userDropdownRef.current &&
         !userDropdownRef.current.contains(e.target as Node) &&
@@ -201,7 +257,7 @@ export default function Navbar() {
     };
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [showNotifDropdown, showUserDropdown]);
+  }, [showNotifDropdown, showChatDropdown, showUserDropdown]);
 
   const handleLogout = async () => {
     document.cookie = "mock-session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
@@ -294,12 +350,17 @@ export default function Navbar() {
                 <LayoutGrid className="w-5 h-5 text-steel" />
               </button>
 
-              {/* 2. Messenger Icon Link (Facebook-style) */}
+              {/* 2. Messenger Icon Button (Facebook-style) */}
               <div className="relative flex items-center justify-center">
-                <Link
-                  href="/chat"
+                <button
+                  ref={messengerRef}
+                  onClick={() => {
+                    setShowChatDropdown(!showChatDropdown);
+                    setShowNotifDropdown(false);
+                    setShowUserDropdown(false);
+                  }}
                   className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
-                    pathname.startsWith("/chat") 
+                    showChatDropdown 
                       ? "bg-brand-green/10 text-brand-green border border-brand-green/20" 
                       : "bg-surface hover:bg-hairline text-steel hover:text-ink"
                   }`}
@@ -313,7 +374,80 @@ export default function Navbar() {
                       {unreadMsgCount}
                     </span>
                   )}
-                </Link>
+                </button>
+
+                {/* Dropdown danh sách cuộc trò chuyện */}
+                {showChatDropdown && (
+                  <div
+                    ref={chatDropdownRef}
+                    className="absolute right-0 mt-2.5 top-10 w-80 bg-canvas border border-hairline rounded-2xl shadow-2xl overflow-hidden z-[99]"
+                    style={{ transformOrigin: "top right" }}
+                  >
+                    <div className="p-3.5 border-b border-hairline flex items-center justify-between bg-surface/30">
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-ink">Cuộc trò chuyện</h4>
+                      <Link 
+                        href="/chat" 
+                        onClick={() => setShowChatDropdown(false)}
+                        className="text-[9px] font-bold text-brand-green hover:underline cursor-pointer"
+                      >
+                        Mở hộp thư lớn
+                      </Link>
+                    </div>
+
+                    <div className="max-h-72 overflow-y-auto divide-y divide-hairline-soft scrollbar-custom bg-canvas">
+                      {loadingChatPartners ? (
+                        <div className="p-6 text-center text-xs text-stone animate-pulse">
+                          Đang tải cuộc trò chuyện...
+                        </div>
+                      ) : chatPartners.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-stone">
+                          Không có cuộc trò chuyện nào gần đây.
+                        </div>
+                      ) : (
+                        chatPartners.map((partner) => (
+                          <div 
+                            key={partner.id}
+                            onClick={() => {
+                              setShowChatDropdown(false);
+                              const event = new CustomEvent("open-mini-chat", {
+                                detail: {
+                                  id: partner.id,
+                                  fullName: partner.fullName,
+                                  role: partner.role,
+                                  avatarUrl: partner.avatarUrl
+                                }
+                              });
+                              window.dispatchEvent(event);
+                            }}
+                            className="p-3 cursor-pointer hover:bg-surface/50 transition-colors flex gap-2.5 items-center"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-green to-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-hairline-soft">
+                              {partner.fullName.slice(0, 1).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h5 className="text-xs font-bold text-ink truncate">
+                                {partner.fullName}
+                              </h5>
+                              <p className="text-[9px] text-steel capitalize leading-none mt-1">
+                                {partner.role === "freelancer" ? "Editor / Freelancer" : "Creator"}
+                              </p>
+                            </div>
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-green shrink-0"></span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="p-2 border-t border-hairline bg-surface/10 text-center">
+                      <button
+                        onClick={() => setShowChatDropdown(false)}
+                        className="text-[10px] font-bold text-charcoal hover:underline cursor-pointer"
+                      >
+                        Đóng cửa sổ
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 3. Notification Bell (Facebook-style) */}

@@ -22,6 +22,7 @@ import {
   sendMessageAction, 
   markMessagesAsReadAction, 
   getUnreadMessagesAction,
+  getChatPartnersAction,
   Message,
   ChatPartner
 } from "@/app/api/chat/actions";
@@ -44,6 +45,11 @@ export default function ChatBubblePopup() {
   const [newMessageText, setNewMessageText] = useState("");
   const [sending, setSending] = useState(false);
   const [lastMessageCount, setLastMessageCount] = useState(0);
+
+  // Switch Partner states inside Mini Chat
+  const [chatPartners, setChatPartners] = useState<ChatPartner[]>([]);
+  const [loadingSwitch, setLoadingSwitch] = useState(false);
+  const [showSwitchPartner, setShowSwitchPartner] = useState(false);
 
   const bubbleRef = useRef<HTMLButtonElement>(null);
   const chatBoxRef = useRef<HTMLDivElement>(null);
@@ -123,6 +129,45 @@ export default function ChatBubblePopup() {
 
     fetchSession();
   }, [pathname, isChatPage]);
+
+  // Lắng nghe sự kiện mở chat trực tiếp từ trang cá nhân
+  useEffect(() => {
+    if (isChatPage) return;
+
+    const handleOpenMiniChat = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        setActivePartner(customEvent.detail);
+        setIsOpen(true);
+      }
+    };
+
+    window.addEventListener("open-mini-chat", handleOpenMiniChat);
+    return () => {
+      window.removeEventListener("open-mini-chat", handleOpenMiniChat);
+    };
+  }, [isChatPage]);
+
+  // Tải danh sách đối tác để chuyển đổi trong cửa sổ chat nổi
+  const loadSwitchPartners = async () => {
+    setLoadingSwitch(true);
+    try {
+      const res = await getChatPartnersAction();
+      if (res.success && res.data) {
+        setChatPartners(res.data);
+      }
+    } catch (e) {
+      console.error("Lỗi tải đối tác switch popup:", e);
+    } finally {
+      setLoadingSwitch(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showSwitchPartner) {
+      loadSwitchPartners();
+    }
+  }, [showSwitchPartner]);
 
   // Polling lấy tin nhắn chưa đọc
   useEffect(() => {
@@ -356,7 +401,8 @@ export default function ChatBubblePopup() {
     }
   };
 
-  if (isChatPage || !session) return null;
+  const shouldShow = activePartner !== null || lastMessageCount > 0;
+  if (isChatPage || !session || !shouldShow) return null;
 
   return (
     <div className="fixed bottom-6 right-24 z-[9998] font-sans flex flex-col items-end">
@@ -364,12 +410,16 @@ export default function ChatBubblePopup() {
       {isOpen && activePartner && (
         <div 
           ref={chatBoxRef}
-          className="w-[328px] h-[450px] bg-[#242526] border border-[#393a3b] rounded-2xl shadow-2xl overflow-hidden flex flex-col mb-4 select-none"
+          className="w-[328px] h-[450px] bg-[#242526] border border-[#393a3b] rounded-2xl shadow-2xl overflow-hidden flex flex-col mb-4 select-none relative"
           style={{ transformOrigin: "bottom right" }}
         >
           {/* Header */}
           <div className="h-14 bg-[#242526] border-b border-[#393a3b] px-3 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2 overflow-hidden cursor-pointer" onClick={() => router.push(`/chat?u=${activePartner.id}`)}>
+            <div 
+              className="flex items-center gap-2 overflow-hidden cursor-pointer hover:bg-[#3a3b3c] p-1.5 rounded-xl transition-colors duration-200"
+              onClick={() => setShowSwitchPartner(!showSwitchPartner)}
+              title="Nhấp để chuyển đổi cuộc trò chuyện khác"
+            >
               <div className="relative shrink-0">
                 <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-green to-emerald-500 text-white flex items-center justify-center font-bold text-sm border border-[#393a3b]">
                   {activePartner.fullName.slice(0, 1).toUpperCase()}
@@ -378,7 +428,7 @@ export default function ChatBubblePopup() {
               </div>
               <div className="overflow-hidden">
                 <div className="flex items-center gap-1">
-                  <h4 className="text-xs font-bold text-[#e4e6eb] truncate max-w-[130px]">
+                  <h4 className="text-xs font-bold text-[#e4e6eb] truncate max-w-[120px]">
                     {activePartner.fullName}
                   </h4>
                   <ChevronDown className="w-3.5 h-3.5 text-[#b0b3b8] shrink-0" />
@@ -390,22 +440,15 @@ export default function ChatBubblePopup() {
             </div>
 
             <div className="flex items-center gap-1">
-              {/* Phone Call */}
-              <button 
-                type="button"
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[#a200ff] hover:bg-[#3a3b3c] transition-colors cursor-pointer"
-                title="Bắt đầu cuộc gọi thoại"
+              {/* Maximize/Link to main chat page */}
+              <Link 
+                href={`/chat?u=${activePartner.id}`}
+                onClick={() => setIsOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#b0b3b8] hover:bg-[#3a3b3c] hover:text-[#e4e6eb] transition-colors cursor-pointer"
+                title="Mở hộp thư lớn"
               >
-                <Phone className="w-4 h-4" />
-              </button>
-              {/* Video Call */}
-              <button 
-                type="button"
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[#a200ff] hover:bg-[#3a3b3c] transition-colors cursor-pointer"
-                title="Bắt đầu cuộc gọi video"
-              >
-                <Video className="w-4 h-4" />
-              </button>
+                <ExternalLink className="w-4 h-4" />
+              </Link>
               {/* Minimize Button */}
               <button 
                 type="button"
@@ -421,6 +464,7 @@ export default function ChatBubblePopup() {
                 onClick={() => {
                   setIsOpen(false);
                   setActivePartner(null);
+                  setShowSwitchPartner(false);
                 }}
                 className="w-8 h-8 rounded-full flex items-center justify-center text-[#b0b3b8] hover:bg-[#3a3b3c] hover:text-[#e4e6eb] transition-colors cursor-pointer"
                 title="Đóng chat"
@@ -429,6 +473,59 @@ export default function ChatBubblePopup() {
               </button>
             </div>
           </div>
+
+          {/* Switch Partner Overlay */}
+          {showSwitchPartner && (
+            <div className="absolute inset-x-0 bottom-0 top-14 bg-[#18191a] z-50 overflow-y-auto divide-y divide-[#393a3b] p-2 flex flex-col">
+              <div className="p-2 text-[10px] font-bold uppercase tracking-wider text-[#b0b3b8] flex justify-between items-center border-b border-[#393a3b] shrink-0 mb-1">
+                <span>Chọn cuộc trò chuyện</span>
+                <button 
+                  type="button"
+                  onClick={() => setShowSwitchPartner(false)}
+                  className="text-xs text-[#a200ff] hover:underline cursor-pointer"
+                >
+                  Hủy
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-[#393a3b] scrollbar-custom">
+                {loadingSwitch ? (
+                  <div className="p-6 text-center text-xs text-[#b0b3b8] animate-pulse">
+                    Đang tải đối tác...
+                  </div>
+                ) : chatPartners.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-[#b0b3b8]">
+                    Không có đối tác chat nào khác.
+                  </div>
+                ) : (
+                  chatPartners.map((partner) => (
+                    <div
+                      key={partner.id}
+                      onClick={() => {
+                        setActivePartner(partner);
+                        setShowSwitchPartner(false);
+                        setMessages([]); // Clear to trigger reload
+                      }}
+                      className={`p-2.5 flex items-center gap-2 hover:bg-[#3a3b3c] rounded-xl cursor-pointer transition-colors ${
+                        partner.id === activePartner.id ? "bg-[#3a3b3c]/50 font-bold" : ""
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-green to-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-[#393a3b]">
+                        {partner.fullName.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h5 className="text-xs font-bold text-[#e4e6eb] truncate">
+                          {partner.fullName}
+                        </h5>
+                        <p className="text-[9px] text-[#b0b3b8] capitalize">
+                          {partner.role === "freelancer" ? "Editor / Freelancer" : "Creator"}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Khung tin nhắn */}
           <div className="flex-1 overflow-y-auto p-3.5 space-y-4 bg-[#18191a] scrollbar-custom flex flex-col">
@@ -500,38 +597,14 @@ export default function ChatBubblePopup() {
             onSubmit={handleSendMessage}
             className="p-2.5 bg-[#242526] border-t border-[#393a3b] flex items-center gap-2 shrink-0"
           >
-            {/* Left actions */}
-            <div className="flex items-center gap-1.5 text-[#a200ff]">
-              <button 
-                type="button"
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#3a3b3c] transition-colors cursor-pointer"
-                title="Mở rộng công cụ"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-              <button 
-                type="button"
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#3a3b3c] transition-colors cursor-pointer"
-                title="Gửi hình ảnh"
-              >
-                <ImageIcon className="w-4 h-4" />
-              </button>
-              <button 
-                type="button"
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#3a3b3c] transition-colors cursor-pointer"
-                title="Gửi nhãn dán"
-              >
-                <Smile className="w-4 h-4" />
-              </button>
-              <button 
-                type="button"
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#3a3b3c] transition-colors cursor-pointer text-[9px] font-black font-mono border-2 border-[#a200ff] leading-none flex items-center justify-center"
-                style={{ height: '24px', width: '28px' }}
-                title="Gửi ảnh GIF"
-              >
-                GIF
-              </button>
-            </div>
+            {/* Smile emoji reaction button on the left (tinh gọn) */}
+            <button 
+              type="button"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#a200ff] hover:bg-[#3a3b3c] transition-colors cursor-pointer shrink-0"
+              title="Biểu cảm"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
 
             {/* Text input container */}
             <div className="relative flex-1 flex items-center">
@@ -544,13 +617,6 @@ export default function ChatBubblePopup() {
                 disabled={sending}
                 required
               />
-              <button
-                type="button"
-                className="absolute right-2.5 text-[#a200ff] hover:text-[#b27ef3] cursor-pointer"
-                title="Chèn biểu tượng cảm xúc"
-              >
-                <Smile className="w-4 h-4" />
-              </button>
             </div>
 
             {/* Fast Send (Thumbs up or Football emoji if empty, Send icon if not empty) */}
@@ -596,7 +662,7 @@ export default function ChatBubblePopup() {
             setIsOpen(!isOpen);
           }
         }}
-        className="w-14 h-14 bg-gradient-to-tr from-[#a200ff] to-[#0084ff] text-white rounded-full shadow-2xl hover:shadow-purple-500/20 flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer relative border border-white/10"
+        className="w-14 h-14 bg-gradient-to-tr from-brand-green to-emerald-500 text-white rounded-full shadow-2xl hover:shadow-brand-green/20 flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer relative border border-white/10"
         title="Trò chuyện trực tuyến"
       >
         <svg className="w-6 h-6 fill-current text-white" viewBox="0 0 24 24">

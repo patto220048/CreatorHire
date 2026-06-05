@@ -502,12 +502,23 @@ export default function FreelancerDetailView({ freelancer, creatorJobs, currentR
                     <Send className="w-3.5 h-3.5" /> Gửi Lời Mời & Thỏa thuận Báo giá
                   </button>
                   
-                  <Link
-                    href={`/chat?u=${freelancer.id}`}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const event = new CustomEvent("open-mini-chat", {
+                        detail: {
+                          id: freelancer.id,
+                          fullName: freelancer.name,
+                          role: "freelancer",
+                          avatarUrl: null
+                        }
+                      });
+                      window.dispatchEvent(event);
+                    }}
                     className="w-full h-10 mt-3 bg-surface border border-hairline hover:bg-canvas text-charcoal text-xs font-semibold rounded-full transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer hover:scale-105 active:scale-95"
                   >
                     <MessageSquare className="w-3.5 h-3.5 text-brand-green" /> Trò chuyện trực tuyến
-                  </Link>
+                  </button>
                 </form>
               </div>
             ) : currentRole === "freelancer" ? (
