@@ -30,6 +30,39 @@ interface VideoReviewToolProps {
   currentUserName: string;
 }
 
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const scriptPages: Record<number, Array<{ type: "title" | "meta" | "page" | "scene" | "direction" | "dialogue"; text: string; actor?: string }>> = {
+  1: [
+    { type: "title", text: "CREATORHIRE TVC SCRIPT - VERSION 1.2" },
+    { type: "meta", text: "Người viết: Đội ngũ biên kịch CreatorHire | Ngày: 05/06/2026" },
+    { type: "page", text: "--- TRANG 1 ---" },
+    { type: "scene", text: "[001] NGOẠI - ĐƯỜNG PHỐ - BAN NGÀY" },
+    { type: "direction", text: "Không khí tấp nập của đường phố Sài Gòn. Tiếng còi xe inh ỏi. Camera lia từ trên cao xuống một quán cafe vỉa hè." },
+    { type: "dialogue", actor: "NAM (EDITOR)", text: "đang ôm chiếc máy tính xách tay cũ kỹ. Vẻ mặt đờ đẫn, tay run run gõ bàn phím." },
+    { type: "dialogue", actor: "NAM", text: '"Lại trễ deadline nữa rồi... Khách hàng còn chưa trả tiền ký quỹ. Sống sao đây?"' }
+  ],
+  2: [
+    { type: "page", text: "--- TRANG 2 ---" },
+    { type: "scene", text: "[002] NỘI - PHÒNG LÀM VIỆC CREATOR - BAN ĐÊM" },
+    { type: "direction", text: "Ánh sáng phát ra từ màn hình PC lớn. Phòng làm việc bày biện nhiều máy quay, đèn led neon đẹp mắt." },
+    { type: "dialogue", actor: "LAN (CREATOR)", text: "đang lướt mạng, thở dài chán nản nhìn kênh Youtube của mình." },
+    { type: "dialogue", actor: "LAN", text: '"Video edit chán quá, tụt view thê thảm. Phải tìm editor mới thôi. Nhưng thuê ngoài sợ bị lừa tiền hoặc sản phẩm không đúng ý..."' },
+    { type: "direction", text: "Lan bất chợt lướt thấy trang web CreatorHire.vn" },
+    { type: "dialogue", actor: "LAN", text: '"Ủa, trang này có hệ thống ký quỹ bảo mật tự động hả? Để đăng tin thử xem sao."' }
+  ],
+  3: [
+    { type: "page", text: "--- TRANG 3 ---" },
+    { type: "scene", text: "[003] NGOẠI - QUÁN CAFE HẸN GẶP - BAN NGÀY" },
+    { type: "direction", text: "Nam và Lan ngồi đối diện nhau, gương mặt hào hứng. Trên bàn là ly nước và chiếc laptop đang chạy sản phẩm hoàn chỉnh." },
+    { type: "dialogue", actor: "LAN", text: '"Đúng ý em rồi! Edit giật giật khớp nhạc, màu sắc bắt mắt lắm!"' },
+    { type: "dialogue", actor: "NAM", text: '"Dạ, nhờ nền tảng CreatorHire giữ tiền ký quỹ nên em rất yên tâm tập trung làm bài, không sợ bị bùng nữa."' },
+    { type: "direction", text: "Cả hai bắt tay vui vẻ. Logo CreatorHire hiện lên cùng slogan: \"Kết nối uy tín - Ký quỹ an toàn\"." }
+  ]
+};
+
 // Helper trích xuất ID YouTube
 function getYouTubeId(url: string) {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -141,6 +174,7 @@ export default function VideoReviewTool({
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [documentPage, setDocumentPage] = useState(1);
   const [selectedScriptText, setSelectedScriptText] = useState("");
+  const [activeHighlightText, setActiveHighlightText] = useState("");
   const deliveryType = getDeliveryType(deliveryLink);
   const cleanedUrl = cleanDeliveryUrl(deliveryLink, deliveryType);
   
@@ -169,6 +203,24 @@ export default function VideoReviewTool({
   useEffect(() => {
     commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [comments.length]);
+
+  const renderHighlightText = (content: string) => {
+    if (!activeHighlightText) return content;
+    const parts = content.split(new RegExp(`(${escapeRegExp(activeHighlightText)})`, "gi"));
+    return (
+      <>
+        {parts.map((part, i) => 
+          part.toLowerCase() === activeHighlightText.toLowerCase() ? (
+            <mark key={i} className="bg-yellow-500 text-black px-0.5 rounded font-bold animate-pulse">
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </>
+    );
+  };
 
   // 1. Tải danh sách comments từ server hoặc localStorage
   const loadComments = async () => {
@@ -634,6 +686,7 @@ export default function VideoReviewTool({
 
           setCommentText("");
           setSelectedScriptText("");
+          setActiveHighlightText("");
           setIsDrawingMode(false);
           clearCanvas();
           setSuccessMsg("Gửi góp ý thành công!");
@@ -658,6 +711,7 @@ export default function VideoReviewTool({
           if (res.success) {
             setCommentText("");
             setSelectedScriptText("");
+            setActiveHighlightText("");
             setIsDrawingMode(false);
             clearCanvas();
             setSuccessMsg("Gửi góp ý thành công!");
@@ -684,6 +738,7 @@ export default function VideoReviewTool({
       }
     } else if (deliveryType === "document") {
       setDocumentPage(comment.timestamp);
+      setActiveHighlightText(comment.drawing_data || "");
       if (comment.drawing_data) {
         setTimeout(() => {
           highlightScriptText(comment.drawing_data || "");
@@ -749,40 +804,34 @@ export default function VideoReviewTool({
                     Khung đọc kịch bản nháp (Trang {documentPage})
                   </div>
                   
-                  {documentPage === 1 && (
-                    <div className="space-y-4 text-left">
-                      <p className="text-center font-bold text-zinc-100 text-xs">CREATORHIRE TVC SCRIPT - VERSION 1.2</p>
-                      <p className="text-center text-zinc-500 text-[9px]">Người viết: Đội ngũ biên kịch CreatorHire | Ngày: 05/06/2026</p>
-                      <p className="text-zinc-500 mt-6 font-bold">--- TRANG 1 ---</p>
-                      <p><span className="text-zinc-500 font-bold">[001] NGOẠI - ĐƯỜNG PHỐ - BAN NGÀY</span></p>
-                      <p className="pl-4 italic text-zinc-400">Không khí tấp nập của đường phố Sài Gòn. Tiếng còi xe inh ỏi. Camera lia từ trên cao xuống một quán cafe vỉa hè.</p>
-                      <p className="pl-8"><span className="font-bold text-brand-green">NAM (EDITOR)</span> đang ôm chiếc máy tính xách tay cũ kỹ. Vẻ mặt đờ đẫn, tay run run gõ bàn phím.</p>
-                      <p className="pl-12 text-zinc-200">NAM: "Lại trễ deadline nữa rồi... Khách hàng còn chưa trả tiền ký quỹ. Sống sao đây?"</p>
-                    </div>
-                  )}
-
-                  {documentPage === 2 && (
-                    <div className="space-y-4 text-left">
-                      <p className="text-zinc-500 font-bold">--- TRANG 2 ---</p>
-                      <p><span className="text-zinc-500 font-bold">[002] NỘI - PHÒNG LÀM VIỆC CREATOR - BAN ĐÊM</span></p>
-                      <p className="pl-4 italic text-zinc-400">Ánh sáng phát ra từ màn hình PC lớn. Phòng làm việc bày biện nhiều máy quay, đèn led neon đẹp mắt.</p>
-                      <p className="pl-8"><span className="font-bold text-brand-green">LAN (CREATOR)</span> đang lướt mạng, thở dài chán nản nhìn kênh Youtube của mình.</p>
-                      <p className="pl-12 text-zinc-200">LAN: "Video edit chán quá, tụt view thê thảm. Phải tìm editor mới thôi. Nhưng thuê ngoài sợ bị lừa tiền hoặc sản phẩm không đúng ý..."</p>
-                      <p className="pl-8"><span className="italic text-zinc-400">Lan bất chợt lướt thấy trang web CreatorHire.vn</span></p>
-                      <p className="pl-12 text-zinc-200">LAN: "Ủa, trang này có hệ thống ký quỹ bảo mật tự động hả? Để đăng tin thử xem sao."</p>
-                    </div>
-                  )}
-
-                  {documentPage >= 3 && (
-                    <div className="space-y-4 text-left">
-                      <p className="text-zinc-500 font-bold">--- TRANG {documentPage} ---</p>
-                      <p><span className="text-zinc-500 font-bold">[003] NGOẠI - QUÁN CAFE HẸN GẶP - BAN NGÀY</span></p>
-                      <p className="pl-4 italic text-zinc-400">Nam và Lan ngồi đối diện nhau, gương mặt hào hứng. Trên bàn là ly nước và chiếc laptop đang chạy sản phẩm hoàn chỉnh.</p>
-                      <p className="pl-12 text-zinc-200">LAN: "Đúng ý em rồi! Edit giật giật khớp nhạc, màu sắc bắt mắt lắm!"</p>
-                      <p className="pl-12 text-zinc-200">NAM: "Dạ, nhờ nền tảng CreatorHire giữ tiền ký quỹ nên em rất yên tâm tập trung làm bài, không sợ bị bùng nữa."</p>
-                      <p className="pl-8 italic text-zinc-500">Cả hai bắt tay vui vẻ. Logo CreatorHire hiện lên cùng slogan: "Kết nối uy tín - Ký quỹ an toàn".</p>
-                    </div>
-                  )}
+                  <div className="space-y-4 text-left">
+                    {(scriptPages[documentPage] || scriptPages[3]).map((line, idx) => {
+                      if (line.type === "title") {
+                        return <p key={idx} className="text-center font-bold text-zinc-100 text-xs">{renderHighlightText(line.text)}</p>;
+                      }
+                      if (line.type === "meta") {
+                        return <p key={idx} className="text-center text-zinc-500 text-[9px]">{renderHighlightText(line.text)}</p>;
+                      }
+                      if (line.type === "page") {
+                        return <p key={idx} className="text-zinc-500 mt-6 font-bold">{renderHighlightText(line.text)}</p>;
+                      }
+                      if (line.type === "scene") {
+                        return <p key={idx}><span className="text-zinc-500 font-bold">{renderHighlightText(line.text)}</span></p>;
+                      }
+                      if (line.type === "direction") {
+                        return <p key={idx} className="pl-4 italic text-zinc-400">{renderHighlightText(line.text)}</p>;
+                      }
+                      if (line.type === "dialogue") {
+                        return (
+                          <p key={idx} className={line.actor?.includes("(") ? "pl-8" : "pl-12 text-zinc-200"}>
+                            {line.actor && <span className="font-bold text-brand-green">{renderHighlightText(line.actor)} </span>}
+                            {renderHighlightText(line.text)}
+                          </p>
+                        );
+                      }
+                      return null;
+                    })}
+                  </div>
                 </div>
               )}
               
