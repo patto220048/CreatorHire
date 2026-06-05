@@ -636,7 +636,9 @@ export default function VideoReviewTool({
       {/* Cột 1 & 2: Trình phát video / ảnh / tài liệu */}
       <div className="lg:col-span-2 flex flex-col h-full justify-between gap-3 min-h-0">
         {/* Khung phát video với Canvas Overlay */}
-        <div className="relative w-full bg-black rounded-lg overflow-hidden border border-hairline-dark select-none shadow-md group flex-1 min-h-0 flex items-center justify-center">
+        <div className={`relative w-full bg-black rounded-lg overflow-hidden border border-hairline-dark shadow-md group flex-1 min-h-0 flex items-center justify-center ${
+          deliveryType !== "document" ? "select-none" : ""
+        }`}>
           {deliveryType === "image" ? (
             <div className="w-full h-full flex items-center justify-center bg-zinc-900 relative">
               <img 
@@ -655,7 +657,11 @@ export default function VideoReviewTool({
                 <iframe src={cleanedUrl} className="w-full h-full border-none bg-white" />
               ) : (
                 // Mock Script Reader showing page-by-page layout
-                <div className="flex-1 p-5 font-mono text-[11px] leading-relaxed overflow-y-auto bg-zinc-900 text-zinc-300">
+                <div 
+                  contentEditable={true}
+                  suppressContentEditableWarning={true}
+                  className="flex-1 p-5 font-mono text-[11px] leading-relaxed overflow-y-auto bg-zinc-900 text-zinc-300 focus:outline-none select-text cursor-text"
+                >
                   <div className="border-b border-zinc-800 pb-2 mb-3 text-center text-zinc-500 text-[10px] uppercase tracking-widest font-sans font-bold">
                     Khung đọc kịch bản nháp (Trang {documentPage})
                   </div>
@@ -698,23 +704,35 @@ export default function VideoReviewTool({
               )}
               
               {/* Điều khiển trang kịch bản */}
-              <div className="bg-zinc-950 border-t border-zinc-800 p-2 flex justify-between items-center text-[10px] text-zinc-400 select-none">
-                <button 
-                  type="button"
-                  onClick={() => setDocumentPage(prev => Math.max(1, prev - 1))}
-                  className="px-2 py-1 bg-zinc-800 rounded hover:bg-zinc-700 disabled:opacity-30 cursor-pointer"
-                  disabled={documentPage === 1}
-                >
-                  Trang trước
-                </button>
+              <div className="bg-zinc-950 border-t border-zinc-800 p-2 flex justify-between items-center text-[10px] text-zinc-400 select-none gap-2">
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => setDocumentPage(prev => Math.max(1, prev - 1))}
+                    className="px-2 py-1 bg-zinc-800 rounded hover:bg-zinc-700 disabled:opacity-30 cursor-pointer"
+                    disabled={documentPage === 1}
+                  >
+                    Trang trước
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setDocumentPage(prev => prev + 1)}
+                    className="px-2 py-1 bg-zinc-800 rounded hover:bg-zinc-700 cursor-pointer"
+                  >
+                    Trang sau
+                  </button>
+                </div>
+                
                 <span>Trang {documentPage}</span>
-                <button 
-                  type="button"
-                  onClick={() => setDocumentPage(prev => prev + 1)}
-                  className="px-2 py-1 bg-zinc-800 rounded hover:bg-zinc-700 cursor-pointer"
+                
+                <a
+                  href={deliveryLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1 bg-brand-green/10 border border-brand-green/20 text-brand-green rounded hover:bg-brand-green/20 flex items-center gap-1 font-sans font-bold select-none cursor-pointer"
                 >
-                  Trang sau
-                </button>
+                  Mở tài liệu gốc <ExternalLink className="w-2.5 h-2.5" />
+                </a>
               </div>
             </div>
           ) : ytId ? (
