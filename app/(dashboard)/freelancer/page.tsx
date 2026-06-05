@@ -97,7 +97,25 @@ export default async function FreelancerDashboard() {
 
       // Lọc các job đang làm việc (status = in-progress) và mình đã ứng tuyển được nhận (accepted)
       // Trong mock mode, ta coi job-2 đã được freelancer này nhận
-      activeJobs = allJobs.filter((job) => job.status === "in-progress");
+      const mockEscrowsCookie = cookieStore.get("mock-escrows");
+      let allEscrows: any[] = [];
+      if (mockEscrowsCookie && mockEscrowsCookie.value) {
+        try {
+          allEscrows = JSON.parse(mockEscrowsCookie.value);
+        } catch (e) {}
+      }
+
+      activeJobs = allJobs
+        .filter((job) => job.status === "in-progress")
+        .map((job) => {
+          const escrow = allEscrows.find((e: any) => e.job_id === job.id);
+          return {
+            ...job,
+            budget_amount: job.budget_amount,
+            delivery_link: escrow ? escrow.delivery_link : null,
+            delivery_note: escrow ? escrow.delivery_note : null,
+          };
+        });
       
       const acceptedProps = freelancerProps.filter((p) => p.status === "accepted");
       const pendingProps = freelancerProps.filter((p) => p.status === "pending");
@@ -159,7 +177,23 @@ export default async function FreelancerDashboard() {
             .eq("status", "in-progress");
 
           if (jobs && !jobsError) {
-            activeJobs = jobs;
+            // Lấy thêm thông tin escrow cho mỗi job
+            const enrichedJobs = await Promise.all(
+              jobs.map(async (job: any) => {
+                const { data: escrow } = await supabase
+                  .from("escrows")
+                  .select("delivery_link, delivery_note")
+                  .eq("job_id", job.id)
+                  .maybeSingle();
+                return {
+                  ...job,
+                  budget_amount: Number(job.budget_amount),
+                  delivery_link: escrow ? escrow.delivery_link : null,
+                  delivery_note: escrow ? escrow.delivery_note : null,
+                };
+              })
+            );
+            activeJobs = enrichedJobs;
           }
         }
 

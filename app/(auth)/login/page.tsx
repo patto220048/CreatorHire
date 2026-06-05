@@ -128,11 +128,51 @@ export default function LoginPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full h-10 bg-ink text-on-dark text-xs font-semibold rounded-full hover:bg-charcoal transition-colors disabled:opacity-50 flex items-center justify-center"
+              className="w-full h-10 bg-ink text-on-dark text-xs font-semibold rounded-full hover:bg-charcoal transition-colors disabled:opacity-50 flex items-center justify-center cursor-pointer"
               disabled={loading}
             >
               {loading ? "Đang xử lý..." : "Đăng Nhập"}
             </button>
+
+            <div className="border-t border-hairline-soft pt-5 mt-5 text-center">
+              <p className="text-[10px] text-steel mb-3">Hoặc sử dụng tài khoản Test Mock nhanh:</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sessionData = {
+                      email: "mock-freelancer@creatorhire.vn",
+                      role: "freelancer",
+                      fullName: "Hoàng Minh (Editor)"
+                    };
+                    document.cookie = `mock-session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400`;
+                    const params = new URLSearchParams(window.location.search);
+                    const redirect = params.get("redirect") || "/freelancer";
+                    window.location.href = redirect;
+                  }}
+                  className="py-2.5 px-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 rounded-md border border-indigo-500/20 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  💻 Freelancer Mode
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sessionData = {
+                      email: "mock-creator@creatorhire.vn",
+                      role: "creator",
+                      fullName: "Huy Nguyễn (Creator)"
+                    };
+                    document.cookie = `mock-session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400`;
+                    const params = new URLSearchParams(window.location.search);
+                    const redirect = params.get("redirect") || "/creator";
+                    window.location.href = redirect;
+                  }}
+                  className="py-2.5 px-3 bg-brand-green/10 hover:bg-brand-green/20 text-brand-green rounded-md border border-brand-green/20 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  🎬 Creator Mode
+                </button>
+              </div>
+            </div>
           </form>
         </div>
       </main>

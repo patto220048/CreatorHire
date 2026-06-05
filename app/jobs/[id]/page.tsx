@@ -19,7 +19,7 @@ export default async function JobDetailPage({ params }: PageProps) {
   // 1. Kiểm tra session và vai trò người dùng
   const { data: { user } } = await supabase.auth.getUser();
   
-  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || id.startsWith("mock-");
 
   let jobData: any = null;
   let userRole: string | null = null;

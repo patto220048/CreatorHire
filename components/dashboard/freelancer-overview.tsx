@@ -1,9 +1,25 @@
+// components/dashboard/freelancer-overview.tsx
+// Client Component hiển thị Tổng quan Bảng điều khiển Freelancer và form nộp sản phẩm
+
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import gsap from "gsap";
-import { Search, Play, FileText, CheckCircle2, XCircle, ArrowUpRight } from "lucide-react";
+import { submitDeliverableAction } from "@/app/(dashboard)/freelancer/actions";
+import { 
+  Search, 
+  Play, 
+  FileText, 
+  CheckCircle2, 
+  XCircle, 
+  ArrowUpRight, 
+  UploadCloud, 
+  AlertCircle, 
+  Link2, 
+  Check 
+} from "lucide-react";
 
 interface Job {
   id: string;
@@ -11,6 +27,8 @@ interface Job {
   category: string;
   budget_amount: number;
   status: string;
+  delivery_link?: string | null;
+  delivery_note?: string | null;
 }
 
 interface Proposal {
@@ -33,7 +51,14 @@ interface OverviewProps {
 }
 
 export default function FreelancerOverview({ activeJobs, proposals, stats }: OverviewProps) {
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [formLink, setFormLink] = useState("");
+  const [formNote, setFormNote] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitPending, startSubmitTransition] = useTransition();
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -82,6 +107,90 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
 
     return () => ctx.revert();
   }, []);
+
+  const toggleExpand = (jobId: string) => {
+    if (expandedJobId === jobId) {
+      // Collapse animation
+      const formEl = document.getElementById(`delivery-form-${jobId}`);
+      if (formEl) {
+        gsap.to(formEl, {
+          height: 0,
+          opacity: 0,
+          duration: 0.3,
+          ease: "power2.inOut",
+          onComplete: () => {
+            setExpandedJobId(null);
+            setSubmitError(null);
+          }
+        });
+      } else {
+        setExpandedJobId(null);
+      }
+    } else {
+      // Set value of link and note if edit mode
+      const job = activeJobs.find((j) => j.id === jobId);
+      if (job) {
+        setFormLink(job.delivery_link || "");
+        setFormNote(job.delivery_note || "");
+      }
+
+      setExpandedJobId(jobId);
+      setSubmitError(null);
+
+      // Expand animation after state sets and renders
+      setTimeout(() => {
+        const formEl = document.getElementById(`delivery-form-${jobId}`);
+        if (formEl) {
+          gsap.fromTo(
+            formEl,
+            { height: 0, opacity: 0 },
+            { height: "auto", opacity: 1, duration: 0.4, ease: "power2.out" }
+          );
+        }
+      }, 50);
+    }
+  };
+
+  const handleDeliverableSubmit = async (e: React.FormEvent<HTMLFormElement>, jobId: string) => {
+    e.preventDefault();
+    setSubmitError(null);
+
+    const formData = new FormData();
+    formData.append("job_id", jobId);
+    formData.append("delivery_link", formLink);
+    formData.append("delivery_note", formNote);
+
+    startSubmitTransition(async () => {
+      try {
+        const res = await submitDeliverableAction(null, formData);
+        if (res && res.error) {
+          setSubmitError(res.error);
+        } else if (res && res.success) {
+          // Collapse form
+          const formEl = document.getElementById(`delivery-form-${jobId}`);
+          if (formEl) {
+            gsap.to(formEl, {
+              height: 0,
+              opacity: 0,
+              duration: 0.35,
+              ease: "power2.inOut",
+              onComplete: () => {
+                setExpandedJobId(null);
+                setFormLink("");
+                setFormNote("");
+                router.refresh();
+              }
+            });
+          } else {
+            setExpandedJobId(null);
+            router.refresh();
+          }
+        }
+      } catch (err) {
+        setSubmitError("Đã xảy ra lỗi kết nối. Vui lòng thử lại.");
+      }
+    });
+  };
 
   const renderCategoryIcon = (category: string) => {
     switch (category) {
@@ -169,33 +278,141 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
                 Bạn chưa tham gia dự án nào. Hãy vào mục "Tìm dự án" để ứng tuyển!
               </div>
             ) : (
-              activeJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="p-4 border border-hairline-soft rounded-lg hover:border-brand-green/30 transition-colors flex items-center justify-between gap-4 group"
-                >
-                  <div className="space-y-1 overflow-hidden">
-                    <h4 className="text-xs font-bold text-ink group-hover:text-brand-green transition-colors truncate">
-                      {job.title}
-                    </h4>
-                    <div className="flex items-center gap-2 text-[10px] text-steel">
-                      <span className="px-2 py-0.5 bg-surface text-stone border border-hairline rounded font-mono">
-                        {renderCategoryIcon(job.category)}
-                      </span>
-                      <span>•</span>
-                      <span className="font-semibold text-charcoal">
-                        Ngân sách: {job.budget_amount.toLocaleString("vi-VN")} ₫
-                      </span>
-                    </div>
-                  </div>
-                  <Link
-                    href={`/freelancer/proposals`}
-                    className="shrink-0 w-8 h-8 rounded-full border border-hairline flex items-center justify-center hover:bg-brand-green/10 hover:border-brand-green text-stone hover:text-brand-green transition-all"
+              activeJobs.map((job) => {
+                const isExpanded = expandedJobId === job.id;
+                const isDelivered = !!job.delivery_link;
+
+                return (
+                  <div
+                    key={job.id}
+                    className="p-4 border border-hairline rounded-lg hover:border-brand-green/20 transition-all flex flex-col gap-3 bg-surface-soft"
                   >
-                    <ArrowUpRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              ))
+                    <div className="flex items-center justify-between gap-4 w-full">
+                      <div className="space-y-1 overflow-hidden flex-1">
+                        <h4 className="text-xs font-bold text-ink truncate">
+                          {job.title}
+                        </h4>
+                        <div className="flex items-center gap-2 text-[10px] text-steel">
+                          <span className="px-2 py-0.5 bg-canvas text-stone border border-hairline rounded font-mono text-[9px]">
+                            {renderCategoryIcon(job.category)}
+                          </span>
+                          <span>•</span>
+                          <span className="font-semibold text-charcoal">
+                            Ngân sách: {job.budget_amount.toLocaleString("vi-VN")} ₫
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        {isDelivered && (
+                          <span className="text-[9px] font-bold text-brand-green bg-brand-green/10 border border-brand-green/20 px-2 py-0.5 rounded flex items-center gap-0.5">
+                            <Check className="w-3 h-3" /> Đã nộp sản phẩm
+                          </span>
+                        )}
+                        
+                        <button
+                          onClick={() => toggleExpand(job.id)}
+                          className={`h-8 px-4 border rounded-full text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                            isDelivered
+                              ? "border-hairline text-stone hover:text-ink hover:border-steel bg-canvas"
+                              : "border-brand-green/30 text-brand-green bg-brand-green/5 hover:bg-brand-green/10"
+                          }`}
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          {isDelivered ? "Cập nhật sản phẩm" : "Nộp sản phẩm"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* GSAP Expandable Drawer */}
+                    {isExpanded && (
+                      <div
+                        id={`delivery-form-${job.id}`}
+                        className="overflow-hidden border-t border-hairline-soft pt-4 space-y-4"
+                        style={{ height: 0, opacity: 0 }}
+                      >
+                        <form onSubmit={(e) => handleDeliverableSubmit(e, job.id)} className="space-y-4">
+                          {submitError && (
+                            <div className="p-3 bg-brand-error/10 border border-brand-error/20 text-[10px] text-brand-error font-medium rounded flex items-center gap-1.5">
+                              <AlertCircle className="w-4 h-4 shrink-0" /> {submitError}
+                            </div>
+                          )}
+
+                          {isDelivered && (
+                            <div className="p-3 bg-brand-green/5 border border-brand-green/15 text-[10px] text-brand-green rounded space-y-1">
+                              <p className="font-bold flex items-center gap-1">
+                                <Link2 className="w-3.5 h-3.5" /> Đường dẫn đã nộp trước đó:
+                              </p>
+                              <a
+                                href={job.delivery_link || "#"}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="underline font-mono truncate block text-[10px] hover:text-brand-green-deep"
+                              >
+                                {job.delivery_link}
+                              </a>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-[9px] font-bold text-steel uppercase tracking-wider mb-1.5">
+                              Đường dẫn sản phẩm (Google Drive, Youtube nháp, Dropbox...)
+                            </label>
+                            <input
+                              type="url"
+                              required
+                              value={formLink}
+                              onChange={(e) => setFormLink(e.target.value)}
+                              placeholder="https://drive.google.com/file/d/..."
+                              className="w-full h-9 px-3 bg-canvas text-charcoal border border-hairline rounded text-xs focus:border-brand-green focus:outline-none transition-colors"
+                              disabled={isSubmitPending}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold text-steel uppercase tracking-wider mb-1.5">
+                              Ghi chú nghiệm thu gửi Nhà sáng tạo (không bắt buộc)
+                            </label>
+                            <textarea
+                              rows={3}
+                              value={formNote}
+                              onChange={(e) => setFormNote(e.target.value)}
+                              placeholder="Mô tả các chỉnh sửa chính, pass giải nén file hoặc ghi chú feedback..."
+                              className="w-full p-2.5 bg-canvas text-charcoal border border-hairline rounded text-xs focus:border-brand-green focus:outline-none transition-colors leading-relaxed"
+                              disabled={isSubmitPending}
+                            />
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(job.id)}
+                              className="h-8 px-4 border border-hairline text-stone hover:text-ink rounded-full text-[10px] font-bold transition-colors cursor-pointer"
+                              disabled={isSubmitPending}
+                            >
+                              Hủy bỏ
+                            </button>
+                            <button
+                              type="submit"
+                              className="h-8 px-5 bg-ink text-on-dark hover:bg-brand-green hover:text-canvas rounded-full text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                              disabled={isSubmitPending}
+                            >
+                              {isSubmitPending ? (
+                                <>
+                                  <span className="animate-spin inline-block w-3 h-3 border border-on-dark border-t-transparent rounded-full" />
+                                  Đang gửi...
+                                </>
+                              ) : (
+                                "Nộp sản phẩm bàn giao"
+                              )}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

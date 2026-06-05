@@ -12,7 +12,7 @@ export async function updateProposalStatusAction(
   jobId: string,
   newStatus: "accepted" | "rejected"
 ) {
-  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || proposalId.startsWith("mock-");
 
   if (isMock) {
     // ----------------------------------------------------
@@ -164,6 +164,82 @@ export async function updateProposalStatusAction(
   // Làm mới cache các route
   revalidatePath("/creator");
   revalidatePath("/creator/jobs");
+
+  return { success: true };
+}
+
+export async function releaseEscrowAction(jobId: string) {
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || jobId.startsWith("mock-");
+
+  if (isMock) {
+    try {
+      const cookieStore = await cookies();
+
+      // 1. Cập nhật Job status sang 'completed'
+      const mockJobsCookie = cookieStore.get("mock-jobs");
+      let jobs: any[] = [];
+      if (mockJobsCookie && mockJobsCookie.value) {
+        jobs = JSON.parse(mockJobsCookie.value);
+      }
+      const jobIdx = jobs.findIndex((j) => j.id === jobId);
+      if (jobIdx !== -1) {
+        jobs[jobIdx].status = "completed";
+        cookieStore.set("mock-jobs", JSON.stringify(jobs), { path: "/", maxAge: 86400 });
+      }
+
+      // 2. Cập nhật Escrow status sang 'released'
+      const mockEscrowsCookie = cookieStore.get("mock-escrows");
+      let escrows: any[] = [];
+      if (mockEscrowsCookie && mockEscrowsCookie.value) {
+        escrows = JSON.parse(mockEscrowsCookie.value);
+      }
+      const escrowIdx = escrows.findIndex((e) => e.job_id === jobId);
+      if (escrowIdx !== -1) {
+        escrows[escrowIdx].status = "released";
+        cookieStore.set("mock-escrows", JSON.stringify(escrows), { path: "/", maxAge: 86400 });
+      }
+    } catch (e) {
+      return { error: "Lỗi lưu cookie ký quỹ giả lập." };
+    }
+  } else {
+    try {
+      const supabase = await getSupabaseServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        return { error: "Phiên làm việc hết hạn. Vui lòng đăng nhập lại." };
+      }
+
+      // 1. Cập nhật jobs table
+      const { error: jobError } = await supabase
+        .from("jobs")
+        .update({ status: "completed" })
+        .eq("id", jobId)
+        .eq("creator_id", user.id);
+
+      if (jobError) {
+        return { error: `Lỗi cập nhật dự án: ${jobError.message}` };
+      }
+
+      // 2. Cập nhật escrows table
+      const { error: escrowError } = await supabase
+        .from("escrows")
+        .update({ status: "released" })
+        .eq("job_id", jobId)
+        .eq("creator_id", user.id);
+
+      if (escrowError) {
+        return { error: `Lỗi giải ngân ký quỹ: ${escrowError.message}` };
+      }
+    } catch (e) {
+      return { error: "Lỗi kết nối cơ sở dữ liệu." };
+    }
+  }
+
+  // Revalidate cache
+  revalidatePath("/creator");
+  revalidatePath("/creator/jobs");
+  revalidatePath("/freelancer");
 
   return { success: true };
 }

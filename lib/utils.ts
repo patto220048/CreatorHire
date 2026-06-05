@@ -22,6 +22,7 @@ export function formatVND(amount: number): string {
  */
 export function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 

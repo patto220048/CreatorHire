@@ -1,9 +1,21 @@
 "use client";
 
 import { useState, useRef, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import gsap from "gsap";
-import { updateProposalStatusAction } from "@/app/(dashboard)/creator/jobs/actions";
-import { Video, FileText, Image, Settings, Play, Radio, CheckCircle2 } from "lucide-react";
+import { updateProposalStatusAction, releaseEscrowAction } from "@/app/(dashboard)/creator/jobs/actions";
+import { 
+  Video, 
+  FileText, 
+  Image, 
+  Settings, 
+  Play, 
+  Radio, 
+  CheckCircle2,
+  ExternalLink,
+  Coins,
+  Clock
+} from "lucide-react";
 
 interface Job {
   id: string;
@@ -13,6 +25,8 @@ interface Job {
   budget_type: string;
   status: string;
   created_at: string;
+  delivery_link?: string | null;
+  delivery_note?: string | null;
 }
 
 interface Proposal {
@@ -31,9 +45,58 @@ interface JobsListProps {
 }
 
 export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
+  const router = useRouter();
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const handleReleaseEscrow = (jobId: string) => {
+    setActionError(null);
+    const cardEl = document.getElementById(`in-progress-card-${jobId}`);
+
+    startTransition(async () => {
+      try {
+        const res = await releaseEscrowAction(jobId);
+        if (res && res.error) {
+          setActionError(res.error);
+        } else if (res && res.success) {
+          if (cardEl) {
+            // Flash color
+            gsap.to(cardEl, {
+              backgroundColor: "rgba(0, 212, 164, 0.1)",
+              borderColor: "#00d4a4",
+              duration: 0.3
+            });
+            // Slide up and shrink
+            gsap.to(cardEl, {
+              y: -30,
+              opacity: 0,
+              scale: 0.95,
+              height: 0,
+              padding: 0,
+              marginTop: 0,
+              marginBottom: 0,
+              duration: 0.5,
+              delay: 0.3,
+              ease: "power2.inOut",
+              onComplete: () => {
+                setSuccessMessage("Giải ngân ký quỹ thành công! Dự án đã hoàn tất.");
+                router.refresh();
+                setTimeout(() => setSuccessMessage(null), 3000);
+              }
+            });
+          } else {
+            setSuccessMessage("Giải ngân ký quỹ thành công! Dự án đã hoàn tất.");
+            router.refresh();
+            setTimeout(() => setSuccessMessage(null), 3000);
+          }
+        }
+      } catch (err) {
+        setActionError("Lỗi kết nối giải ngân.");
+      }
+    });
+  };
 
   const listRef = useRef<HTMLDivElement>(null);
   const detailsRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
@@ -97,6 +160,12 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
     setActionError(null);
     const itemEl = document.getElementById(`proposal-card-${proposalId}`);
 
+    if (action === "accepted") {
+      // Chuyển hướng sang trang checkout ký quỹ
+      router.push(`/checkout/${proposalId}`);
+      return;
+    }
+
     startTransition(async () => {
       // Chạy hiệu ứng mờ đi trước khi gọi API
       if (itemEl) {
@@ -113,29 +182,17 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
       } else {
         // Hiệu ứng hoàn thành thành công
         if (itemEl) {
-          if (action === "accepted") {
-            // Flash xanh lá, sau đó ẩn đi sau khi load lại dữ liệu
-            gsap.to(itemEl, {
-              backgroundColor: "rgba(0, 212, 164, 0.15)",
-              borderColor: "#00d4a4",
-              color: "#0a0a0a",
-              scale: 1.02,
-              duration: 0.4,
-              ease: "power2.out",
-            });
-          } else {
-            // Bay sang phải và biến mất
-            gsap.to(itemEl, {
-              x: 100,
-              opacity: 0,
-              height: 0,
-              padding: 0,
-              marginTop: 0,
-              marginBottom: 0,
-              duration: 0.4,
-              ease: "power3.in",
-            });
-          }
+          // Bay sang phải và biến mất (đối với proposal bị từ chối)
+          gsap.to(itemEl, {
+            x: 100,
+            opacity: 0,
+            height: 0,
+            padding: 0,
+            marginTop: 0,
+            marginBottom: 0,
+            duration: 0.4,
+            ease: "power3.in",
+          });
         }
       }
     });
@@ -193,6 +250,12 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
         </div>
       )}
 
+      {successMessage && (
+        <div className="p-4 bg-brand-green/10 border border-brand-green/20 text-xs text-brand-green font-medium rounded-md">
+          ✔ {successMessage}
+        </div>
+      )}
+
       {/* Grid danh sách */}
       <div className="space-y-8">
         {/* Phần 1: Dự án đang thực hiện (In-progress) */}
@@ -202,25 +265,71 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
               <Play className="w-3.5 h-3.5 fill-brand-tag text-brand-tag" /> Đang thực hiện ({inProgressJobs.length})
             </h3>
             <div className="grid grid-cols-1 gap-4">
-              {inProgressJobs.map((job) => (
-                <div key={job.id} className="job-card bg-canvas border border-hairline p-6 rounded-lg shadow-sm" style={{ opacity: 0 }}>
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <h4 className="text-xs font-bold text-ink">{job.title}</h4>
-                      <div className="flex items-center gap-2 text-[10px] text-steel">
-                        <span className="font-semibold text-charcoal">{renderJobCategory(job.category)}</span>
-                        <span>•</span>
-                        <span className="font-mono">{job.budget_amount.toLocaleString("vi-VN")} ₫ ({job.budget_type === "fixed" ? "Trọn gói" : "Theo giờ"})</span>
+              {inProgressJobs.map((job) => {
+                const hasDeliverable = !!job.delivery_link;
+
+                return (
+                  <div
+                    key={job.id}
+                    id={`in-progress-card-${job.id}`}
+                    className="job-card bg-canvas border border-hairline p-6 rounded-lg shadow-sm space-y-4"
+                    style={{ opacity: 0 }}
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-hairline-soft pb-4">
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-ink">{job.title}</h4>
+                        <div className="flex items-center gap-2 text-[10px] text-steel">
+                          <span className="font-semibold text-charcoal">{renderJobCategory(job.category)}</span>
+                          <span>•</span>
+                          <span className="font-mono">{job.budget_amount.toLocaleString("vi-VN")} ₫ ({job.budget_type === "fixed" ? "Trọn gói" : "Theo giờ"})</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] text-brand-tag font-semibold bg-brand-tag/10 border border-brand-tag/20 px-3 py-1 rounded-full uppercase tracking-wider">
+                          Đang làm việc
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] text-brand-tag font-semibold bg-brand-tag/10 border border-brand-tag/20 px-3 py-1 rounded-full uppercase tracking-wider">
-                        Đang làm việc
-                      </span>
-                    </div>
+
+                    {/* Delivery & Release Block */}
+                    {hasDeliverable ? (
+                      <div className="bg-brand-green/5 border border-brand-green/10 rounded-md p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <span className="text-[9px] font-black text-brand-green uppercase tracking-wider block">
+                            Freelancer đã nộp sản phẩm bàn giao:
+                          </span>
+                          <a
+                            href={job.delivery_link || "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-mono font-semibold text-ink hover:underline flex items-center gap-1 truncate"
+                          >
+                            {job.delivery_link} <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                          </a>
+                          {job.delivery_note && (
+                            <p className="text-[11px] text-steel italic">
+                              "{job.delivery_note}"
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleReleaseEscrow(job.id)}
+                          className="h-9 px-5 bg-brand-green text-canvas hover:bg-brand-green-deep rounded-full text-xs font-bold transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1 cursor-pointer shrink-0"
+                          disabled={isPending}
+                        >
+                          <Coins className="w-4 h-4" /> Giải ngân ký quỹ
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="bg-surface p-4 rounded border border-hairline-soft text-center text-xs text-stone flex items-center justify-center gap-2">
+                        <Clock className="w-4 h-4 text-stone animate-spin" /> Chờ Freelancer nộp sản phẩm bàn giao để tiến hành giải ngân.
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

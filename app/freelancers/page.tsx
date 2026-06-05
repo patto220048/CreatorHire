@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import gsap from "gsap";
+import Navbar from "@/components/navbar";
 
 interface Freelancer {
   id: string;
@@ -129,34 +130,7 @@ export default function FreelancersPage() {
   return (
     <div className="flex flex-col min-h-screen bg-canvas font-sans">
       {/* Navigation */}
-      <header className="sticky top-0 z-50 bg-canvas/85 backdrop-blur-md border-b border-hairline-soft">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="text-xl font-bold tracking-wider text-ink">
-              creator<span className="text-brand-green">hire.</span>
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link href="/jobs" className="text-sm font-medium text-steel hover:text-ink transition-colors">
-                Tìm công việc
-              </Link>
-              <Link href="/freelancers" className="text-sm font-semibold text-ink">
-                Tìm Freelancer
-              </Link>
-              <Link href="/pricing" className="text-sm font-medium text-steel hover:text-ink transition-colors">
-                Bảng giá
-              </Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="px-4 py-2 text-sm font-medium text-charcoal hover:bg-surface rounded-full transition-colors">
-              Đăng nhập
-            </Link>
-            <Link href="/register" className="px-4 py-2 text-sm font-medium bg-ink text-on-dark rounded-full hover:bg-charcoal transition-colors">
-              Đăng ký
-            </Link>
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       {/* Hero Search Header */}
       <section className="bg-surface py-12 border-b border-hairline">

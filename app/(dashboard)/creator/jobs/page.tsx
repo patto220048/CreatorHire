@@ -58,7 +58,23 @@ export default async function CreatorJobsPage() {
           },
         ];
       }
+      // Đọc thêm escrows để đính kèm bàn giao
+      const mockEscrowsCookie = cookieStore.get("mock-escrows");
+      let escrows: any[] = [];
+      if (mockEscrowsCookie && mockEscrowsCookie.value) {
+        try {
+          escrows = JSON.parse(mockEscrowsCookie.value);
+        } catch (e) {}
+      }
 
+      dbJobs = dbJobs.map((job) => {
+        const escrow = escrows.find((e: any) => e.job_id === job.id);
+        return {
+          ...job,
+          delivery_link: escrow ? escrow.delivery_link : null,
+          delivery_note: escrow ? escrow.delivery_note : null,
+        };
+      });
       // Đọc các Proposal giả lập từ cookie, nếu chưa có thì nạp mặc định
       const mockPropsCookie = cookieStore.get("mock-proposals");
       if (mockPropsCookie && mockPropsCookie.value) {
@@ -101,7 +117,21 @@ export default async function CreatorJobsPage() {
         .order("created_at", { ascending: false });
 
       if (jobs && !jobsError) {
-        dbJobs = jobs;
+        const enrichedJobs = await Promise.all(
+          jobs.map(async (job: any) => {
+            const { data: escrow } = await supabase
+              .from("escrows")
+              .select("delivery_link, delivery_note")
+              .eq("job_id", job.id)
+              .maybeSingle();
+            return {
+              ...job,
+              delivery_link: escrow ? escrow.delivery_link : null,
+              delivery_note: escrow ? escrow.delivery_note : null,
+            };
+          })
+        );
+        dbJobs = enrichedJobs;
 
         // 2. Lấy toàn bộ báo giá ứng tuyển vào các công việc này
         const jobIds = jobs.map((j: any) => j.id);

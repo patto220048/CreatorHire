@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import gsap from "gsap";
+import Navbar from "@/components/navbar";
 import { submitProposalAction } from "@/app/jobs/[id]/actions";
 import { Video, FileText, Image, Settings, Check, AlertCircle, ArrowLeft, Clock, DollarSign } from "lucide-react";
 
@@ -171,22 +172,16 @@ export default function JobDetailView({ job, userRole, existingProposal }: JobDe
   return (
     <div className="min-h-screen bg-surface font-sans">
       {/* Header */}
-      <header className="border-b border-hairline py-4 px-6 bg-canvas/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold tracking-wider text-ink">
-            creator<span className="text-brand-green">hire.</span>
-          </Link>
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-1.5 text-xs text-steel hover:text-ink font-semibold"
-          >
-            <ArrowLeft className="w-4 h-4" /> Quay lại
-          </button>
-        </div>
-      </header>
+      <Navbar />
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto py-12 px-6">
+      <main className="max-w-7xl mx-auto py-8 px-6 space-y-4">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-xs text-steel hover:text-ink font-semibold cursor-pointer mb-2"
+        >
+          <ArrowLeft className="w-4 h-4" /> Quay lại
+        </button>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Cột trái: Chi tiết dự án */}
           <div ref={detailColRef} className="lg:col-span-7 bg-canvas border border-hairline rounded-lg p-8 space-y-6" style={{ opacity: 0 }}>
@@ -263,10 +258,76 @@ export default function JobDetailView({ job, userRole, existingProposal }: JobDe
                 <p className="text-xs text-steel">Đăng nhập bằng tài khoản Freelancer để gửi báo giá ứng tuyển dự án này.</p>
                 <Link
                   href={`/login?redirect=/jobs/${job.id}`}
-                  className="w-full h-10 bg-ink text-on-dark text-xs font-semibold rounded-full hover:bg-charcoal transition-colors flex items-center justify-center"
+                  className="w-full h-10 bg-ink text-on-dark text-xs font-semibold rounded-full hover:bg-charcoal transition-colors flex items-center justify-center shadow-sm"
                 >
                   Đăng nhập ngay
                 </Link>
+                
+                <div className="border-t border-hairline-soft pt-4 mt-2">
+                  <p className="text-[10px] text-slate mb-2">Chế độ kiểm thử nhanh:</p>
+                  <button
+                    onClick={() => {
+                      const sessionData = {
+                        email: "mock-freelancer@creatorhire.vn",
+                        role: "freelancer",
+                        fullName: "Hoàng Minh (Editor)"
+                      };
+                      document.cookie = `mock-session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400`;
+                      
+                      // Khởi tạo các jobs mặc định nếu chưa có
+                      const getCookie = (name: string) => {
+                        const value = `; ${document.cookie}`;
+                        const parts = value.split(`; ${name}=`);
+                        if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+                        return null;
+                      };
+                      
+                      if (!getCookie("mock-jobs")) {
+                        const defaultJobs = [
+                          {
+                            id: "mock-job-1",
+                            title: "Cần Video Editor chuyên nghiệp dựng Video Shorts công nghệ",
+                            category: "video-edit",
+                            budget_amount: 1500000,
+                            budget_type: "fixed",
+                            description: "Dự án dựng video shorts review iPhone 15 Pro Max thời lượng 45 giây. Yêu cầu phong cách nhanh, dồn dập (style Alex Hormozi), chèn sound effects công nghệ chân thực, zoom chuyển cảnh giật gân. Cần hoàn thành trước ngày thứ Hai tới. Đã có sẵn file lồng tiếng (Voiceover) chất lượng cao.",
+                            status: "open",
+                            created_at: "2 giờ trước",
+                            proposals_count: 2
+                          },
+                          {
+                            id: "mock-job-2",
+                            title: "Viết kịch bản phim hoạt hình ngắn 2D (Thời lượng 5 phút)",
+                            category: "script",
+                            budget_amount: 3500000,
+                            budget_type: "fixed",
+                            description: "Cần tìm biên kịch sáng tạo kịch bản 2D câu chuyện gia đình cảm động. Yêu cầu kịch bản phân cảnh chi tiết, có hội thoại tự nhiên, có thông điệp sâu sắc.",
+                            status: "in-progress",
+                            created_at: "1 ngày trước",
+                            proposals_count: 1
+                          },
+                          {
+                            id: "mock-job-3",
+                            title: "Thiết kế bộ Thumbnail bắt mắt cho kênh Vlog ẩm thực du lịch",
+                            category: "thumbnail",
+                            budget_amount: 1200000,
+                            budget_type: "fixed",
+                            description: "Cần thiết kế 3 thumbnail cho các vlog ẩm thực tại TP.HCM. Yêu cầu ảnh ghép biểu cảm ngạc nhiên rõ nét, chữ tiêu đề ngắn gọn (khoảng 3 từ), màu sắc rực rỡ thu hút click chuột.",
+                            status: "completed",
+                            created_at: "5 ngày trước",
+                            proposals_count: 3
+                          }
+                        ];
+                        document.cookie = `mock-jobs=${encodeURIComponent(JSON.stringify(defaultJobs))}; path=/; max-age=86400`;
+                      }
+                      
+                      window.location.reload();
+                    }}
+                    className="w-full h-10 bg-brand-green/10 text-brand-green hover:bg-brand-green/20 text-xs font-semibold rounded-full border border-brand-green/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    ⚡ Đăng nhập Freelancer (Test)
+                  </button>
+                </div>
               </div>
             ) : (
               /* Tài khoản Freelancer hợp lệ -> Render Form nộp báo giá */

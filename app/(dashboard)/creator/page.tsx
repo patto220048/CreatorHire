@@ -39,8 +39,7 @@ export default async function CreatorDashboard() {
       console.warn("Không đọc được mock-jobs cookie", e);
     }
 
-    dbJobs = [
-      ...customJobs,
+    const defaultJobs = [
       {
         id: "mock-job-1",
         title: "Cần Video Editor chuyên nghiệp dựng Video Shorts công nghệ",
@@ -69,6 +68,12 @@ export default async function CreatorDashboard() {
         proposals_count: 3,
       },
     ];
+
+    if (customJobs.length > 0) {
+      dbJobs = customJobs;
+    } else {
+      dbJobs = defaultJobs;
+    }
 
     try {
       const cookieStore = await cookies();

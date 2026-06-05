@@ -22,7 +22,7 @@ export async function submitProposalAction(prevState: any, formData: FormData) {
     return { error: "Mức giá đề xuất phải là một số lớn hơn 0." };
   }
 
-  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || (jobId && jobId.startsWith("mock-"));
 
   if (isMock) {
     // ----------------------------------------------------
