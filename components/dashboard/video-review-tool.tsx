@@ -140,6 +140,7 @@ export default function VideoReviewTool({
   const [commentText, setCommentText] = useState("");
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [documentPage, setDocumentPage] = useState(1);
+  const [selectedScriptText, setSelectedScriptText] = useState("");
   const deliveryType = getDeliveryType(deliveryLink);
   const cleanedUrl = cleanDeliveryUrl(deliveryLink, deliveryType);
   
@@ -513,16 +514,88 @@ export default function VideoReviewTool({
     hasDrawnRef.current = false;
   };
 
+  const handleScriptMouseUp = () => {
+    const selection = window.getSelection();
+    const text = selection ? selection.toString().trim() : "";
+    if (text && text.length > 2) {
+      setSelectedScriptText(text);
+    }
+  };
+
+  const highlightScriptText = (targetText: string) => {
+    const readerElement = containerRef.current?.querySelector(".script-reader-container");
+    if (!readerElement || !targetText) return;
+
+    const text = readerElement.textContent || "";
+    const index = text.indexOf(targetText);
+    if (index === -1) return;
+
+    try {
+      const range = document.createRange();
+      let charCount = 0;
+      let startNode: Node | null = null;
+      let startOffset = 0;
+      let endNode: Node | null = null;
+      let endOffset = 0;
+
+      const traverse = (node: Node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const nodeLength = node.textContent?.length || 0;
+          if (!startNode && charCount + nodeLength > index) {
+            startNode = node;
+            startOffset = index - charCount;
+          }
+          if (startNode && !endNode && charCount + nodeLength >= index + targetText.length) {
+            endNode = node;
+            endOffset = (index + targetText.length) - charCount;
+          }
+          charCount += nodeLength;
+        } else {
+          for (let i = 0; i < node.childNodes.length; i++) {
+            traverse(node.childNodes[i]);
+            if (startNode && endNode) break;
+          }
+        }
+      };
+
+      traverse(readerElement);
+
+      if (startNode && endNode) {
+        range.setStart(startNode as Node, startOffset);
+        range.setEnd(endNode as Node, endOffset);
+        
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+
+        const parentElement = (startNode as any).parentElement || (startNode as any).parentNode;
+        if (parentElement && parentElement.scrollIntoView) {
+          parentElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+    } catch (e) {
+      console.error("Lỗi highlight script:", e);
+    }
+  };
+
   // 6. Lưu bình luận kèm vẽ Canvas
   const handleSubmitComment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
 
     let drawingDataUrl: string | null = null;
-    const canvas = canvasRef.current;
-    if (isDrawingMode && canvas && hasDrawnRef.current) {
-      drawingDataUrl = canvas.toDataURL("image/png");
+    if (deliveryType === "document" && selectedScriptText) {
+      drawingDataUrl = selectedScriptText;
+    } else {
+      const canvas = canvasRef.current;
+      if (isDrawingMode && canvas && hasDrawnRef.current) {
+        drawingDataUrl = canvas.toDataURL("image/png");
+      }
     }
+
+    const timestampValue = deliveryType === "document" ? documentPage : Math.floor(currentTime);
 
     const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
                    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
@@ -543,7 +616,7 @@ export default function VideoReviewTool({
           const newComment: VideoComment = {
             id: `mock-comment-${Date.now()}`,
             job_id: jobId,
-            timestamp: Math.floor(currentTime),
+            timestamp: timestampValue,
             author_name: currentUserName,
             author_role: currentUserRole,
             content: commentText.trim(),
@@ -560,6 +633,7 @@ export default function VideoReviewTool({
           window.dispatchEvent(new Event("storage"));
 
           setCommentText("");
+          setSelectedScriptText("");
           setIsDrawingMode(false);
           clearCanvas();
           setSuccessMsg("Gửi góp ý thành công!");
@@ -574,7 +648,7 @@ export default function VideoReviewTool({
         try {
           const res = await addVideoCommentAction(
             jobId,
-            Math.floor(currentTime),
+            timestampValue,
             commentText.trim(),
             currentUserName,
             currentUserRole,
@@ -583,6 +657,7 @@ export default function VideoReviewTool({
 
           if (res.success) {
             setCommentText("");
+            setSelectedScriptText("");
             setIsDrawingMode(false);
             clearCanvas();
             setSuccessMsg("Gửi góp ý thành công!");
@@ -609,9 +684,16 @@ export default function VideoReviewTool({
       }
     } else if (deliveryType === "document") {
       setDocumentPage(comment.timestamp);
+      if (comment.drawing_data) {
+        setTimeout(() => {
+          highlightScriptText(comment.drawing_data || "");
+        }, 150);
+      }
     }
     
     setActiveCommentId(comment.id);
+
+    if (deliveryType === "document") return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -660,7 +742,8 @@ export default function VideoReviewTool({
                 <div 
                   contentEditable={true}
                   suppressContentEditableWarning={true}
-                  className="flex-1 p-5 font-mono text-[11px] leading-relaxed overflow-y-auto bg-zinc-900 text-zinc-300 focus:outline-none select-text cursor-text"
+                  className="script-reader-container flex-1 p-5 font-mono text-[11px] leading-relaxed overflow-y-auto bg-zinc-900 text-zinc-300 focus:outline-none select-text cursor-text"
+                  onMouseUp={handleScriptMouseUp}
                 >
                   <div className="border-b border-zinc-800 pb-2 mb-3 text-center text-zinc-500 text-[10px] uppercase tracking-widest font-sans font-bold">
                     Khung đọc kịch bản nháp (Trang {documentPage})
@@ -945,6 +1028,21 @@ export default function VideoReviewTool({
             )}
           </div>
 
+          {selectedScriptText && (
+            <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-[10px] text-yellow-500 flex items-center justify-between gap-2 select-none animate-pulse shrink-0">
+              <div className="truncate flex-1">
+                📌 Đoạn văn bản bôi đen để góp ý: <span className="italic font-bold">"{selectedScriptText}"</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setSelectedScriptText("")}
+                className="text-[9px] text-zinc-500 hover:text-red-500 cursor-pointer font-bold px-1"
+              >
+                Bỏ chọn
+              </button>
+            </div>
+          )}
+
           <textarea
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
@@ -1049,13 +1147,19 @@ export default function VideoReviewTool({
                     </button>
                   </div>
 
+                  {comment.drawing_data && deliveryType === "document" && (
+                    <div className="text-[10px] bg-yellow-500/10 border-l-2 border-yellow-500 p-2 italic text-yellow-500 font-mono rounded-r max-w-full truncate mb-2" title={comment.drawing_data}>
+                      📌 Trích dẫn: "{comment.drawing_data}"
+                    </div>
+                  )}
+
                   <p className="text-[11px] text-charcoal break-words leading-relaxed">
                     {comment.content}
                   </p>
 
                   <div className="flex justify-between items-center text-[9px] text-stone">
                     <span>{comment.created_at}</span>
-                    {comment.drawing_data && (
+                    {comment.drawing_data && deliveryType !== "document" && (
                       <span className="text-red-500 font-bold bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/15 flex items-center gap-0.5">
                         ✏️ Có vẽ hình lỗi
                       </span>
