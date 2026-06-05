@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import MockTestPanel from "@/components/mock-test-panel";
+import ChatBubblePopup from "@/components/chat/chat-bubble-popup";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -31,6 +32,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans bg-canvas text-charcoal" suppressHydrationWarning>
         {children}
+        <ChatBubblePopup />
         <MockTestPanel />
       </body>
     </html>

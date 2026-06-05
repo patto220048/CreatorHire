@@ -13,7 +13,8 @@ import {
   Bell, 
   Check, 
   CheckSquare, 
-  Clock 
+  Clock,
+  MessageSquare
 } from "lucide-react";
 import { 
   getNotificationsAction, 
@@ -21,6 +22,7 @@ import {
   markAllNotificationsAsReadAction, 
   Notification 
 } from "@/app/api/notifications/actions";
+import { getUnreadMessageCountAction } from "@/app/api/chat/actions";
 
 interface UserSession {
   email: string;
@@ -39,6 +41,9 @@ export default function Navbar() {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
+
+  // Chat states
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
 
   // Đọc session từ mock cookie hoặc Supabase client
   useEffect(() => {
@@ -98,17 +103,33 @@ export default function Navbar() {
     }
   };
 
+  // Tải số lượng tin nhắn chưa đọc
+  const loadUnreadMessageCount = async () => {
+    if (!session) return;
+    try {
+      const res = await getUnreadMessageCountAction();
+      if (res.success && typeof res.count === "number") {
+        setUnreadMsgCount(res.count);
+      }
+    } catch (e) {
+      console.error("Lỗi tải số tin nhắn chưa đọc:", e);
+    }
+  };
+
   useEffect(() => {
     if (session) {
       loadNotifications();
+      loadUnreadMessageCount();
 
-      // Polling thông báo mỗi 8 giây
+      // Polling thông báo & tin nhắn mỗi 5 giây
       const interval = setInterval(() => {
         loadNotifications();
-      }, 8000);
+        loadUnreadMessageCount();
+      }, 5000);
       return () => clearInterval(interval);
     } else {
       setNotifications([]);
+      setUnreadMsgCount(0);
     }
   }, [session]);
 
@@ -216,14 +237,7 @@ export default function Navbar() {
             >
               Tìm Freelancer
             </Link>
-            <Link
-              href="/chat"
-              className={`text-sm font-semibold transition-colors ${
-                pathname.startsWith("/chat") ? "text-brand-green font-bold" : "text-steel hover:text-ink"
-              }`}
-            >
-              Tin nhắn
-            </Link>
+            {/* Tin nhắn text link đã được chuyển thành Icon ở góc phải */}
             <Link 
               href="/pricing" 
               className="text-sm font-semibold text-steel hover:text-ink transition-colors"
@@ -242,6 +256,24 @@ export default function Navbar() {
             </div>
           ) : session ? (
             <div className="flex items-center gap-3">
+              {/* Chat Icon Link */}
+              <div className="relative flex items-center justify-center">
+                <Link
+                  href="/chat"
+                  className={`p-2 transition-all rounded-full hover:bg-surface relative flex items-center justify-center cursor-pointer ${
+                    pathname.startsWith("/chat") ? "text-brand-green bg-surface/50" : "text-stone hover:text-ink"
+                  }`}
+                  title="Tin nhắn trực tuyến"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  {unreadMsgCount > 0 && (
+                    <span className="absolute top-1 right-1 w-4 h-4 bg-brand-green text-canvas text-[9px] font-bold rounded-full flex items-center justify-center border border-canvas scale-110 animate-bounce-short">
+                      {unreadMsgCount}
+                    </span>
+                  )}
+                </Link>
+              </div>
+
               {/* Notification Bell (Bell) */}
               <div className="relative">
                 <button

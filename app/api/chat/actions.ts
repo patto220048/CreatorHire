@@ -357,3 +357,117 @@ export async function getChatPartnersAction() {
     }
   }
 }
+
+// Lấy số lượng tin nhắn chưa đọc
+export async function getUnreadMessageCountAction() {
+  const cookieStore = await cookies();
+  const mockSession = cookieStore.get("mock-session");
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
+                 !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+                 (mockSession && mockSession.value);
+
+  if (isMock) {
+    try {
+      if (!mockSession || !mockSession.value) return { success: true, count: 0 };
+      const sessionData = JSON.parse(decodeURIComponent(mockSession.value));
+      const currentUserId = sessionData.role === "creator" ? "mock-creator-id" : "fl-1";
+
+      const mockMessagesCookie = cookieStore.get("mock-messages");
+      if (mockMessagesCookie && mockMessagesCookie.value) {
+        const allMessages: Message[] = JSON.parse(decodeURIComponent(mockMessagesCookie.value));
+        const unreadCount = allMessages.filter(
+          (m) => m.receiver_id === currentUserId && !m.is_read
+        ).length;
+        return { success: true, count: unreadCount };
+      }
+      return { success: true, count: 0 };
+    } catch (e) {
+      return { success: true, count: 0 };
+    }
+  } else {
+    try {
+      const supabase = await getSupabaseServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: true, count: 0 };
+
+      const { count, error } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .eq("receiver_id", user.id)
+        .eq("is_read", false);
+
+      if (error) return { error: error.message };
+      return { success: true, count: count || 0 };
+    } catch (e) {
+      return { success: true, count: 0 };
+    }
+  }
+}
+
+// Lấy chi tiết các tin nhắn chưa đọc
+export async function getUnreadMessagesAction() {
+  const cookieStore = await cookies();
+  const mockSession = cookieStore.get("mock-session");
+  const isMock = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
+                 !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+                 (mockSession && mockSession.value);
+
+  if (isMock) {
+    try {
+      if (!mockSession || !mockSession.value) return { success: true, data: [] };
+      const sessionData = JSON.parse(decodeURIComponent(mockSession.value));
+      const currentUserId = sessionData.role === "creator" ? "mock-creator-id" : "fl-1";
+
+      const mockMessagesCookie = cookieStore.get("mock-messages");
+      if (mockMessagesCookie && mockMessagesCookie.value) {
+        const allMessages: Message[] = JSON.parse(decodeURIComponent(mockMessagesCookie.value));
+        const unread = allMessages.filter(
+          (m) => m.receiver_id === currentUserId && !m.is_read
+        );
+        return { success: true, data: unread };
+      }
+      return { success: true, data: [] };
+    } catch (e) {
+      return { error: "Lỗi đọc tin nhắn giả lập." };
+    }
+  } else {
+    try {
+      const supabase = await getSupabaseServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { success: true, data: [] };
+
+      const { data, error } = await supabase
+        .from("messages")
+        .select(`
+          id,
+          job_id,
+          sender_id,
+          receiver_id,
+          content,
+          is_read,
+          created_at,
+          profiles!messages_sender_id_fkey (full_name, role)
+        `)
+        .eq("receiver_id", user.id)
+        .eq("is_read", false)
+        .order("created_at", { ascending: true });
+
+      if (error) return { error: error.message };
+
+      const formatted: Message[] = (data || []).map((m: any) => ({
+        id: m.id,
+        job_id: m.job_id,
+        sender_id: m.sender_id,
+        sender_name: m.profiles?.full_name || "Thành viên",
+        receiver_id: m.receiver_id,
+        content: m.content,
+        is_read: m.is_read,
+        created_at: new Date(m.created_at).toISOString(),
+      }));
+
+      return { success: true, data: formatted };
+    } catch (e) {
+      return { error: "Lỗi kết nối cơ sở dữ liệu." };
+    }
+  }
+}
