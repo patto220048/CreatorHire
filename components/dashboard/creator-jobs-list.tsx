@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { updateProposalStatusAction, releaseEscrowAction } from "@/app/(dashboard)/creator/jobs/actions";
+import { getSupabaseClient } from "@/lib/supabase/client";
+import VideoReviewTool from "@/components/dashboard/video-review-tool";
 import { 
   Video, 
   FileText, 
@@ -50,6 +52,24 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: "creator" | "freelancer" } | null>(null);
+  const [activeReviewJobId, setActiveReviewJobId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const supabase = await getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUser({
+            fullName: user.user_metadata?.full_name || "Nhà sáng tạo",
+            role: user.user_metadata?.role || "creator",
+          });
+        }
+      } catch (e) {}
+    };
+    fetchUser();
+  }, []);
 
   const handleReleaseEscrow = (jobId: string) => {
     setActionError(null);
@@ -293,34 +313,82 @@ export default function CreatorJobsList({ jobs, proposals }: JobsListProps) {
 
                     {/* Delivery & Release Block */}
                     {hasDeliverable ? (
-                      <div className="bg-brand-green/5 border border-brand-green/10 rounded-md p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-1.5 flex-1 min-w-0">
-                          <span className="text-[9px] font-black text-brand-green uppercase tracking-wider block">
-                            Freelancer đã nộp sản phẩm bàn giao:
-                          </span>
-                          <a
-                            href={job.delivery_link || "#"}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs font-mono font-semibold text-ink hover:underline flex items-center gap-1 truncate"
-                          >
-                            {job.delivery_link} <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          </a>
-                          {job.delivery_note && (
-                            <p className="text-[11px] text-steel italic">
-                              "{job.delivery_note}"
-                            </p>
-                          )}
+                      <div className="space-y-4">
+                        <div className="bg-brand-green/5 border border-brand-green/10 rounded-md p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            <span className="text-[9px] font-black text-brand-green uppercase tracking-wider block">
+                              Freelancer đã nộp sản phẩm bàn giao:
+                            </span>
+                            <a
+                              href={job.delivery_link || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-mono font-semibold text-ink hover:underline flex items-center gap-1 truncate"
+                            >
+                              {job.delivery_link} <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                            </a>
+                            {job.delivery_note && (
+                              <p className="text-[11px] text-steel italic">
+                                "{job.delivery_note}"
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const isOpening = activeReviewJobId !== job.id;
+                                setActiveReviewJobId(isOpening ? job.id : null);
+                                if (isOpening) {
+                                  setTimeout(() => {
+                                    const toolEl = document.getElementById(`video-review-${job.id}`);
+                                    if (toolEl) {
+                                      gsap.fromTo(
+                                        toolEl,
+                                        { height: 0, opacity: 0 },
+                                        { height: "auto", opacity: 1, duration: 0.4, ease: "power2.out" }
+                                      );
+                                    }
+                                  }, 50);
+                                }
+                              }}
+                              className={`h-9 px-4 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                                activeReviewJobId === job.id
+                                  ? "bg-charcoal text-on-dark border-charcoal"
+                                  : "bg-surface text-charcoal border-hairline hover:bg-canvas"
+                              }`}
+                            >
+                              <Video className="w-3.5 h-3.5" /> 
+                              {activeReviewJobId === job.id ? "Đóng phản hồi" : "Duyệt video & sửa nháp (Timestamp)"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleReleaseEscrow(job.id)}
+                              className="h-9 px-5 bg-brand-green text-canvas hover:bg-brand-green-deep rounded-full text-xs font-bold transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1 cursor-pointer shrink-0"
+                              disabled={isPending}
+                            >
+                              <Coins className="w-4 h-4" /> Giải ngân ký quỹ
+                            </button>
+                          </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleReleaseEscrow(job.id)}
-                          className="h-9 px-5 bg-brand-green text-canvas hover:bg-brand-green-deep rounded-full text-xs font-bold transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1 cursor-pointer shrink-0"
-                          disabled={isPending}
-                        >
-                          <Coins className="w-4 h-4" /> Giải ngân ký quỹ
-                        </button>
+                        {/* Video Review Tool Panel */}
+                        {activeReviewJobId === job.id && (
+                          <div 
+                            id={`video-review-${job.id}`}
+                            className="overflow-hidden border-t border-hairline-soft pt-4"
+                            style={{ height: 0, opacity: 0 }}
+                          >
+                            <VideoReviewTool
+                              jobId={job.id}
+                              deliveryLink={job.delivery_link || ""}
+                              currentUserRole="creator"
+                              currentUserName={currentUser?.fullName || "Huy Nguyễn (Creator)"}
+                            />
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="bg-surface p-4 rounded border border-hairline-soft text-center text-xs text-stone flex items-center justify-center gap-2">

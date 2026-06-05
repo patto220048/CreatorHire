@@ -8,6 +8,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { submitDeliverableAction } from "@/app/(dashboard)/freelancer/actions";
+import { getSupabaseClient } from "@/lib/supabase/client";
+import VideoReviewTool from "@/components/dashboard/video-review-tool";
 import { 
   Search, 
   Play, 
@@ -18,7 +20,8 @@ import {
   UploadCloud, 
   AlertCircle, 
   Link2, 
-  Check 
+  Check,
+  Video
 } from "lucide-react";
 
 interface Job {
@@ -59,6 +62,24 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
   const [formNote, setFormNote] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitPending, startSubmitTransition] = useTransition();
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: "creator" | "freelancer" } | null>(null);
+  const [activeReviewJobId, setActiveReviewJobId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const supabase = await getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUser({
+            fullName: user.user_metadata?.full_name || "Freelancer",
+            role: user.user_metadata?.role || "freelancer",
+          });
+        }
+      } catch (e) {}
+    };
+    fetchUser();
+  }, []);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -303,11 +324,40 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                         {isDelivered && (
-                          <span className="text-[9px] font-bold text-brand-green bg-brand-green/10 border border-brand-green/20 px-2 py-0.5 rounded flex items-center gap-0.5">
-                            <Check className="w-3 h-3" /> Đã nộp sản phẩm
-                          </span>
+                          <>
+                            <span className="text-[9px] font-bold text-brand-green bg-brand-green/10 border border-brand-green/20 px-2 py-0.5 rounded flex items-center gap-0.5">
+                              <Check className="w-3 h-3" /> Đã nộp sản phẩm
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const isOpening = activeReviewJobId !== job.id;
+                                setActiveReviewJobId(isOpening ? job.id : null);
+                                if (isOpening) {
+                                  setTimeout(() => {
+                                    const toolEl = document.getElementById(`video-review-${job.id}`);
+                                    if (toolEl) {
+                                      gsap.fromTo(
+                                        toolEl,
+                                        { height: 0, opacity: 0 },
+                                        { height: "auto", opacity: 1, duration: 0.4, ease: "power2.out" }
+                                      );
+                                    }
+                                  }, 50);
+                                }
+                              }}
+                              className={`h-8 px-3.5 border rounded-full text-[10px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                                activeReviewJobId === job.id
+                                  ? "bg-charcoal text-on-dark border-charcoal"
+                                  : "bg-surface border-hairline text-charcoal hover:bg-canvas"
+                              }`}
+                            >
+                              <Video className="w-3.5 h-3.5" />
+                              {activeReviewJobId === job.id ? "Đóng phản hồi" : "Xem phản hồi (Timestamp)"}
+                            </button>
+                          </>
                         )}
                         
                         <button
@@ -408,6 +458,21 @@ export default function FreelancerOverview({ activeJobs, proposals, stats }: Ove
                             </button>
                           </div>
                         </form>
+                      </div>
+                    )}
+                    {/* Video Review Tool Panel */}
+                    {activeReviewJobId === job.id && (
+                      <div 
+                        id={`video-review-${job.id}`}
+                        className="overflow-hidden border-t border-hairline-soft pt-3"
+                        style={{ height: 0, opacity: 0 }}
+                      >
+                        <VideoReviewTool
+                          jobId={job.id}
+                          deliveryLink={job.delivery_link || ""}
+                          currentUserRole="freelancer"
+                          currentUserName={currentUser?.fullName || "Hoàng Minh (Editor)"}
+                        />
                       </div>
                     )}
                   </div>
